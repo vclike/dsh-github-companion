@@ -52,32 +52,56 @@ restart. Without a token the tools work anonymously against public repos
 
 The token never reaches subprocesses or logs.
 
-### Which permissions to grant
+### Step 1 — Apply for a token (pick ONE)
 
-**Easy mode (recommended for beginners)** — open this link; GitHub pre-checks
-everything the plugin needs:
+**Option A · one-click classic token (easiest)**
 
-> https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github
+1. Log in to GitHub and open this link — every scope the plugin needs is
+   pre-checked:
+   **https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github**
+2. Pick an expiration if you like (or keep no-expiration).
+3. Scroll down, click **Generate token**.
+4. Copy the value (starts with `ghp_`) into the plugin settings card and save.
 
-Scroll down, click **Generate token**, copy the value into the settings card.
-Tradeoff: a classic `repo` scope is account-wide (all repos, read/write) and
-cannot be limited to selected repositories. For per-repository control use a
-fine-grained PAT as below.
+Tradeoff: the classic `repo` scope is account-wide (all repos, read/write) and
+cannot be limited to selected repositories. If that matters, use Option B.
 
-**Fine-grained (advanced)** — Repository access = **All repositories** (new
-repos are covered automatically):
+**Option B · fine-grained token (per-repository control)**
 
-| What you want the agent to do | Minimum permission |
+Apply at **https://github.com/settings/personal-access-tokens/new**
+(GitHub → Settings → Developer settings → Personal access tokens →
+Fine-grained tokens):
+
+1. Set a name and expiration.
+2. Repository access: **All repositories** — repos you create later are
+   covered automatically, no need to touch the token again.
+3. Tick the permissions per the table below.
+4. Generate and copy (starts with `github_pat_`).
+
+### Step 2 — which permissions to tick (Option B)
+
+| Permission | Why |
 |---|---|
-| Read public repos | none — anonymous works (60 req/h) |
-| Read your private repos | Metadata R + Contents R |
-| Issue writes | Issues RW |
-| Branches / commits / PRs / uploads | Contents RW + Pull requests RW + Workflows RW |
-| **Create repositories** (`enableRepoCreation`) | **Administration RW** |
+| Metadata **R** | always required by the API |
+| Contents **RW** | read files, commits, branches, uploads |
+| Issues **RW** | create / update / comment on issues |
+| Pull requests **RW** | PR tools |
+| Workflows **RW** | push workflow files when uploading projects |
+| Administration **RW** | only needed for repo creation (`enableRepoCreation`) |
 
-Recommended one-shot setup: All repositories + Metadata R, Contents RW,
-Issues RW, Pull requests RW, Workflows RW — add Administration RW only when
-you turn on repo creation. Editing permissions later keeps the token value.
+Recommended baseline: the first five. Add Administration RW only when you turn
+on repo creation — editing permissions later keeps the same token value.
+
+### Step 3 — give the token to the plugin
+
+- **Settings UI** (preferred): DSH 设置 → GitHub 区块 → 粘贴进 Token 输入框 →
+  保存。Takes effect immediately; UI never echoes the value back.
+- **Environment variable**: define `GITHUB_TOKEN` (e.g. in `~/.dsh/.env`) and
+  leave the settings field empty. Rotation applies on the next request.
+
+Verify by asking the agent anything about your GitHub account —
+`github_get_me` should report `authenticated: true` (anonymous mode reports
+`false` and only public data works).
 
 > **Storage note**: a PAT saved through the settings UI persists server-side
 > in `~/.dsh/settings.yaml` as plaintext on disk (like the rest of that

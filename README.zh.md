@@ -46,30 +46,54 @@ harness 凭证缝（`ctx.credentials`）每次请求前解析——在任意 pro
 
 token 永不进入子进程环境或日志。
 
-### 令牌需要哪些权限
+### 第一步 · 申请令牌（二选一）
 
-**新手一键（推荐）**——点开下面这个链接，GitHub 会把插件需要的权限全部预选好：
+**方式 A · 一键经典令牌（新手推荐）**
 
-> https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github
+1. 登录 GitHub 后打开这个链接，插件所需的全部权限已自动预选：
+   **https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github**
+2. 按需选择有效期（不选也行）。
+3. 拉到页面底部，点 **Generate token**。
+4. 复制生成的值（`ghp_` 开头），粘贴进插件设置卡片并保存。
 
-拉到底点 **Generate token**，把结果粘贴进设置界面即可。权衡：经典令牌的
-`repo` 权限是账户级（全部仓库可读写），不能限定到个别仓库；需要逐仓控制时
-用下面的细粒度令牌。
+权衡：经典 `repo` 权限是账户级（全部仓库可读写），不能限定个别仓库；在意这点
+就用方式 B。
 
-**细粒度（进阶）**——Repository access 选 **All repositories**
-（新建仓库自动纳入覆盖范围）：
+**方式 B · 细粒度令牌（可按仓库控制）**
 
-| 想让 agent 做的事 | 最低权限要求 |
+申请入口：**https://github.com/settings/personal-access-tokens/new**
+（GitHub → Settings → Developer settings → Personal access tokens →
+Fine-grained tokens）：
+
+1. 填名称、选有效期。
+2. Repository access 选 **All repositories**——以后新建的仓库自动纳入覆盖，
+   无需回来改令牌。
+3. 按下表勾选权限。
+4. 生成并复制（`github_pat_` 开头）。
+
+### 第二步 · 权限勾选对照（方式 B）
+
+| 权限 | 用途 |
 |---|---|
-| 读公开仓库 | 无——匿名即可（60 次/小时） |
-| 读你自己的私有仓库 | Metadata R + Contents R |
-| Issue 写操作 | Issues RW |
-| 分支 / 提交文件 / PR / 上传项目 | Contents RW + Pull requests RW + Workflows RW |
-| **新建仓库**（`enableRepoCreation`） | **Administration RW** |
+| Metadata **R** | API 必需 |
+| Contents **RW** | 读文件、提交、分支、上传项目 |
+| Issues **RW** | Issue 的创建 / 更新 / 评论 |
+| Pull requests **RW** | PR 相关工具 |
+| Workflows **RW** | 上传含工作流文件的项目时需要 |
+| Administration **RW** | 仅"自动新建仓库"开关需要 |
 
-推荐的一次性配置：All repositories + Metadata R / Contents RW / Issues RW /
-Pull requests RW / Workflows RW——只有打开建仓开关时才需要追加
-Administration RW。之后修改权限不会改变令牌值。
+推荐基线：前五项。只有打开建仓开关才追加 Administration RW；之后修改权限
+不会改变令牌值。
+
+### 第三步 · 把令牌交给插件
+
+- **设置界面**（推荐）：DSH 设置 → GitHub 区块 → 粘贴进 Token 输入框 → 保存。
+  立即生效；界面永不回显已保存的值。
+- **环境变量**：定义 `GITHUB_TOKEN`（如写在 `~/.dsh/.env`），设置界面留空。
+  轮换后下一次请求即生效。
+
+验证：问 agent 任意关于你 GitHub 账号的问题——`github_get_me` 应返回
+`authenticated: true`（匿名模式返回 `false` 且只能读公开数据）。
 
 > **存储说明**：经设置界面保存的 PAT 会以**明文**落在本机
 > `~/.dsh/settings.yaml`（与该文档其余部分一致）。`role('secret')` 保护的是
