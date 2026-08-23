@@ -51,6 +51,20 @@ token 永不进入子进程环境或日志。
 
 组合层默认值来自 cordis.yml 插入行（`base` 层）；修改实时生效。
 
+设置页的「GitHub」区块由本包自带的浏览器半（`client.js`，经 `dsh.client`
+manifest 暴露为 `/plugins/dsh-plugin-github/client.js`）贡献，读写走官方
+`settings.describe/mutate` 接口。注意：后端 `settings.register` 本身不产生
+UI——每个设置区块都是客户端插件通过 `settings.section` 座位贡献的。
+
+不经过 UI 的等效做法：在 `~/.dsh/settings.yaml` 直接加用户层分节：
+
+```yaml
+github-tools:
+  enableGitDataTools: true
+github-gate:
+  mode: all
+```
+
 ## 安装
 
 ```bash
