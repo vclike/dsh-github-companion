@@ -17,7 +17,7 @@ Two cordis plugins in one package:
 | `dsh-plugin-github` | `github-tools` | Registers GitHub REST tools on `ctx.tools` |
 | `dsh-plugin-github/gate` | `github-permission-gate` | Example `tools/pre-execute` permission gate scoped to `github_*` tools |
 
-### Tools (18 total, registered per switches)
+### Tools (19 total, registered per switches)
 
 **Read / discovery** — always on:
 `github_get_me`, `github_get_repository`, `github_get_file_contents`,
@@ -52,6 +52,23 @@ restart. Without a token the tools work anonymously against public repos
 
 The token never reaches subprocesses or logs.
 
+### Which permissions to grant
+
+Use a fine-grained PAT with Repository access = **All repositories** (new
+repos are covered automatically):
+
+| What you want the agent to do | Minimum permission |
+|---|---|
+| Read public repos | none — anonymous works (60 req/h) |
+| Read your private repos | Metadata R + Contents R |
+| Issue writes | Issues RW |
+| Branches / commits / PRs / uploads | Contents RW + Pull requests RW + Workflows RW |
+| **Create repositories** (`enableRepoCreation`) | **Administration RW** |
+
+Recommended one-shot setup: All repositories + Metadata R, Contents RW,
+Issues RW, Pull requests RW, Workflows RW — add Administration RW only when
+you turn on repo creation. Editing permissions later keeps the token value.
+
 > **Storage note**: a PAT saved through the settings UI persists server-side
 > in `~/.dsh/settings.yaml` as plaintext on disk (like the rest of that
 > document). `role('secret')` protects the wire and the UI — not the file.
@@ -62,7 +79,7 @@ The token never reaches subprocesses or logs.
 
 Both plugins register settings namespaces rendered by the DSH settings UI:
 
-- `github-tools`: `enableIssueWrites`, `enableGitDataTools`
+- `github-tools`: `enableIssueWrites`, `enableGitDataTools`, `enableRepoCreation`
 - `github-gate`: `mode` (`off|writes|all`), `action` (`ask|deny`), `excludeTools`
 
 Composition defaults come from the cordis.yml insert rows (`base` layer);
@@ -90,8 +107,8 @@ github-gate:
 # published package (bundle channel — takes effect on restart)
 dsh plugin add dsh-plugin-github
 
-# local checkout
-dsh plugin add D:/path/to/dsh-plugin-github   # or github:owner/repo#<sha>
+# from a local checkout of this repository
+dsh plugin add <your-checkout>/dsh-plugin-github   # or github:owner/repo#<sha>
 ```
 
 Then set your token and (optionally) trim the gate row from your profile's
@@ -105,7 +122,7 @@ conventions, token prerequisites, workflow recipes (upload project → private
 repo), and a failure playbook. Install it alongside:
 
 ```bash
-dsh plugin add D:/path/to/dsh-plugin-github/dsh-github-guide
+dsh plugin add <your-checkout>/dsh-plugin-github/dsh-github-guide
 ```
 
 Agents that have it loaded stop guessing about anonymous rate limits, empty
@@ -126,6 +143,7 @@ repo pushes, `already_exists` handling, and why public repos are out of scope.
         maxFileBytes: 262144             # file-content truncation threshold
         enableIssueWrites: true          # composition default (settings UI can override)
         enableGitDataTools: false        # composition default (settings UI can override)
+        enableRepoCreation: false        # composition default (settings UI can override)
     - id: github-permission-gate
       name: dsh-plugin-github/gate
       config:
@@ -142,7 +160,7 @@ npm run typecheck   # tsc --noEmit
 npm test            # vitest (27 tests, offline)
 npm run test:coverage
 npm run build       # emit lib/
-node scripts/verify-load.mjs   # run inside a profile dir after `dsh plugin add`
+node scripts/verify-load.mjs   # run inside a scratch profile dir after `dsh plugin add`
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and PR flow; security
@@ -150,17 +168,18 @@ disclosure goes through [SECURITY.md](SECURITY.md).
 
 ## Testing
 
-Four layers, cheapest first:
+Four layers, from quickest to most thorough (no paid services involved —
+this only ranks run time and setup effort):
 
 ```bash
-# L1 — offline: types + 24 unit tests (client/tools/gate, mocked fetch)
+# L1 — offline: types + 27 unit tests (client/tools/gate, mocked fetch)
 npm run typecheck && npm test
 
 # L2 — package loads through a profile's link layout
-dsh plugin --profile plugin-verify add <repo>   # once
-cd ~/.dsh/profiles/plugin-verify
-dsh --profile plugin-verify --dump-config        # insert rows present?
-node D:/path/to/dsh-plugin-github/scripts/verify-load.mjs
+dsh plugin --profile <scratch> add <your-checkout>/dsh-plugin-github   # once
+cd ~/.dsh/profiles/<scratch>
+dsh --profile <scratch> --dump-config                                  # insert rows present?
+node <your-checkout>/dsh-plugin-github/scripts/verify-load.mjs
 
 # L3 — live GitHub API smoke (READ-ONLY; anonymous works, 60 req/h)
 node scripts/smoke-live.mjs                      # from the repo root
@@ -171,8 +190,9 @@ node scripts/smoke-live.mjs                      # from the repo root
 # create_pull_request against it (GUI chat or headless profile).
 
 # L5 — agent-level E2E: after `dsh plugin add` into your daily profile,
-# ask the assistant e.g. "查一下 bytedance/deer-flow 的 star 数" and watch
-# the tool cards; gate mode=writes should pop an approval for write tools.
+# ask the assistant e.g. "how many stars does langchain-ai/langchain have?"
+# and watch the tool cards; gate mode=writes should pop an approval for
+# write tools.
 ```
 
 ## Boot-safety & recovery (verified by experiment)
@@ -181,7 +201,7 @@ What happens when things go wrong, measured on a real harness boot:
 
 | Scenario | Result |
 |---|---|
-| Healthy rows (`scripts/` none) | boots; model called `github_get_repository` live via a headless one-shot task |
+| Healthy insert rows | boots; model called `github_get_repository` live via a headless one-shot task |
 | Schema-invalid config (e.g. string where number expected) | **entire profile refuses to boot**, exit 1, error names the exact row id and field — fail-closed by design |
 | Valid config but `apply()` throws (e.g. malformed `credentialRef`) | same: boot refuses, stack trace names the plugin |
 | Tool `execute()` throwing at runtime | contained by the tool registry as an `isError` result; harness keeps running |

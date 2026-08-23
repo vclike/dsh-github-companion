@@ -14,7 +14,7 @@ permission-gate 示例插件。
 | `dsh-plugin-github` | `github-tools` | 向 `ctx.tools` 注册 GitHub REST 工具 |
 | `dsh-plugin-github/gate` | `github-permission-gate` | 针对 `github_*` 工具的 `tools/pre-execute` 权限门示例 |
 
-### 工具清单（共 18 个，按开关注册）
+### 工具清单（共 19 个，按开关注册）
 
 **只读/发现** — 恒开：
 `github_get_me`、`github_get_repository`、`github_get_file_contents`、
@@ -46,6 +46,23 @@ harness 凭证缝（`ctx.credentials`）每次请求前解析——在任意 pro
 
 token 永不进入子进程环境或日志。
 
+### 令牌需要哪些权限
+
+使用 Fine-grained PAT，Repository access 选 **All repositories**
+（新建仓库自动纳入覆盖范围）：
+
+| 想让 agent 做的事 | 最低权限要求 |
+|---|---|
+| 读公开仓库 | 无——匿名即可（60 次/小时） |
+| 读你自己的私有仓库 | Metadata R + Contents R |
+| Issue 写操作 | Issues RW |
+| 分支 / 提交文件 / PR / 上传项目 | Contents RW + Pull requests RW + Workflows RW |
+| **新建仓库**（`enableRepoCreation`） | **Administration RW** |
+
+推荐的一次性配置：All repositories + Metadata R / Contents RW / Issues RW /
+Pull requests RW / Workflows RW——只有打开建仓开关时才需要追加
+Administration RW。之后修改权限不会改变令牌值。
+
 > **存储说明**：经设置界面保存的 PAT 会以**明文**落在本机
 > `~/.dsh/settings.yaml`（与该文档其余部分一致）。`role('secret')` 保护的是
 > 网络传输与界面回显，不是磁盘文件。若在意明文落盘，请改用环境变量方式
@@ -55,7 +72,7 @@ token 永不进入子进程环境或日志。
 
 两个插件各自注册了设置命名空间，会渲染在 DSH 设置界面中：
 
-- `github-tools`：`enableIssueWrites`、`enableGitDataTools`
+- `github-tools`：`enableIssueWrites`、`enableGitDataTools`、`enableRepoCreation`
 - `github-gate`：`mode`（`off|writes|all`）、`action`（`ask|deny`）、`excludeTools`
 
 组合层默认值来自 cordis.yml 插入行（`base` 层）；修改实时生效。
@@ -80,8 +97,8 @@ github-gate:
 # 已发布包（bundle 通道 — 重启后生效）
 dsh plugin add dsh-plugin-github
 
-# 本地 checkout
-dsh plugin add D:/path/to/dsh-plugin-github   # 或 github:owner/repo#<sha>
+# 从本仓库的本地检出安装
+dsh plugin add <你的检出目录>/dsh-plugin-github   # 或 github:owner/repo#<sha>
 ```
 
 然后设置 token；不需要权限门时，可从 profile 的 `cordis.patch.yml` 删掉
@@ -94,7 +111,7 @@ gate 那一行。
 （上传项目→私仓）与故障手册。建议一并安装：
 
 ```bash
-dsh plugin add D:/path/to/dsh-plugin-github/dsh-github-guide
+dsh plugin add <你的检出目录>/dsh-plugin-github/dsh-github-guide
 ```
 
 装了它的 agent 不会再对匿名限速、空仓推送、重名处理、公开仓边界反复试错。
@@ -114,6 +131,7 @@ dsh plugin add D:/path/to/dsh-plugin-github/dsh-github-guide
         maxFileBytes: 262144             # 文件内容截断阈值
         enableIssueWrites: true          # 组合层默认（设置界面可覆盖）
         enableGitDataTools: false        # 组合层默认（设置界面可覆盖）
+        enableRepoCreation: false        # 组合层默认（设置界面可覆盖）
     - id: github-permission-gate
       name: dsh-plugin-github/gate
       config:
@@ -130,7 +148,7 @@ npm run typecheck   # tsc --noEmit
 npm test            # vitest（27 个测试，离线）
 npm run test:coverage
 npm run build       # 产出 lib/
-node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于 profile 目录内运行
+node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于临时 profile 目录内运行
 ```
 
 贡献约定与 PR 流程见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全披露走
@@ -138,17 +156,17 @@ node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于 profile 目录内�
 
 ## 测试
 
-四层，由便宜到贵：
+四层，由快到全（不涉及任何付费服务——这里排的只是耗时和搭建成本）：
 
 ```bash
-# L1 — 离线：类型 + 24 个单测（client/tools/gate，mock fetch）
+# L1 — 离线：类型 + 27 个单测（client/tools/gate，mock fetch）
 npm run typecheck && npm test
 
 # L2 — 包能被 profile 的 link 布局加载
-dsh plugin --profile plugin-verify add <repo>   # 一次即可
-cd ~/.dsh/profiles/plugin-verify
-dsh --profile plugin-verify --dump-config        # 插入行存在？
-node D:/path/to/dsh-plugin-github/scripts/verify-load.mjs
+dsh plugin --profile <scratch> add <你的检出目录>/dsh-plugin-github   # 一次即可
+cd ~/.dsh/profiles/<scratch>
+dsh --profile <scratch> --dump-config                                 # 插入行存在？
+node <你的检出目录>/dsh-plugin-github/scripts/verify-load.mjs
 
 # L3 — 真连 GitHub API 冒烟（只读；匿名即可，60 次/小时）
 node scripts/smoke-live.mjs                      # 仓库根目录运行
@@ -159,7 +177,7 @@ node scripts/smoke-live.mjs                      # 仓库根目录运行
 # create_pull_request 顺序驱动（GUI 对话或 headless profile）。
 
 # L5 — agent 级端到端：`dsh plugin add` 进日常 profile 后，直接问
-# "查一下 bytedance/deer-flow 的 star 数" 并观察工具卡片；
+# "langchain-ai/langchain 有多少 star" 并观察工具卡片；
 # gate mode=writes 时写工具应弹出审批。
 ```
 
