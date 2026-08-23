@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 (2026-08-23)
+
+- New read tool: `github_list_starred` — repositories the authenticated user
+  has starred; the natural watchlist for tracking digests. Anonymous mode
+  cannot call it.
+- Usage skill: weekly-digest recipe defaults its watchlist to starred repos
+  when the user does not name repositories explicitly.
+
 ## 0.2.0 (2026-08-23)
 
 Release tooling + digest/release recipes.

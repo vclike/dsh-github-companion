@@ -897,6 +897,28 @@ function createReleaseTool(api: GithubApi): ToolDefinition {
   })
 }
 
+function listStarredTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_starred',
+    description:
+      'List repositories the authenticated user has starred (most recently starred first). This is the natural watchlist for tracking digests. Anonymous mode cannot call this.',
+    parameters: {
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listStarred(num(args.per_page) ?? undefined, exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      const repos = Array.isArray(response.data) ? response.data : []
+      return {
+        ok: true,
+        count: repos.length,
+        repos: repos.map(shapeRepo),
+      }
+    },
+  })
+}
+
 export function buildGithubTools(
   api: GithubApi,
   config: GithubToolsConfig,
@@ -914,6 +936,7 @@ export function buildGithubTools(
     getIssueTool(api),
     listReleasesTool(api, config),
     latestReleaseTool(api),
+    listStarredTool(api, config),
   ]
   if (section.enableIssueWrites) {
     tools.push(createIssueTool(api), updateIssueTool(api), addIssueCommentTool(api))

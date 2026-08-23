@@ -17,7 +17,7 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 
 | 层 | 工具 | 注册条件 | 备注 |
 |---|---|---|---|
-| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue / **list_releases** / **latest_release** | 总是 | 无审批 |
+| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue / **list_releases** / **latest_release** / **list_starred** | 总是 | 无审批；list_starred 匿名不可用 |
 | Issue 写 | create_issue / update_issue / add_issue_comment | 开关默认开 | 每次弹审批 |
 | Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request, **create_release** | 开关默认关 | 每次弹审批 |
 | 建仓 | create_repository | 开关默认关 | 强制私有 |
@@ -75,7 +75,10 @@ README、目录与关键源码。匿名可做但限速紧；有令牌体验好�
 
 ### E. 开源追踪周报（多仓库情报汇总）
 
-对用户报出的每个 `owner/repo`（或用户说"我的 watchlist"时请其列出）：
+watchlist 来源（按优先级）：用户点名的 `owner/repo` 列表；用户说"用我 star 的
+项目"时调 `github_list_starred` 获取；两者都没有时先问一句。
+
+对确定下来的每个 `owner/repo`：
 
 1. `github_latest_release` —— 有新 release 则记录版本号与日期；404 表示尚无发布
 2. `github_list_issues`（默认 open）—— 挑出互动多（评论多）或标题与用户兴趣相关的

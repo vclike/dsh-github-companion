@@ -17,13 +17,13 @@ Two cordis plugins in one package:
 | `dsh-plugin-github` | `github-tools` | Registers GitHub REST tools on `ctx.tools` |
 | `dsh-plugin-github/gate` | `github-permission-gate` | Example `tools/pre-execute` permission gate scoped to `github_*` tools |
 
-### Tools (21 total, registered per switches)
+### Tools (22 total, registered per switches)
 
 **Read / discovery** — always on:
 `github_get_me`, `github_get_repository`, `github_get_file_contents`,
 `github_list_commits`, `github_search_repositories`, `github_search_code`,
 `github_search_issues`, `github_list_issues`, `github_get_issue`,
-`github_list_releases`, `github_latest_release`
+`github_list_releases`, `github_latest_release`, `github_list_starred`
 
 **Issue writes** — switchable (`enableIssueWrites`, default on):
 `github_create_issue`, `github_update_issue`, `github_add_issue_comment`

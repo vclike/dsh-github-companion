@@ -243,6 +243,12 @@ export class GithubApi {
     return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases${query}`, { signal })
   }
 
+  /** Repositories the authenticated user has starred (`/user/starred`). */
+  listStarred(perPage?: number, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
+    const query = perPage ? `?per_page=${Math.min(Math.max(perPage, 1), 100)}` : ''
+    return this.client.request(`/user/starred${query}`, { signal })
+  }
+
   latestRelease(owner: string, repo: string, signal?: AbortSignal): Promise<GithubResponse<ReleaseItem>> {
     return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases/latest`, { signal })
   }

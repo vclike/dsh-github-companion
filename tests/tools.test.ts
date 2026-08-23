@@ -238,6 +238,24 @@ describe('tool execute contracts', () => {
     expect(listed.releases[1]).toMatchObject({ tag_name: 'v1.1.0', draft: true })
   })
 
+  it('github_list_starred shapes starred repos and is always registered', async () => {
+    const { api } = makeApi({
+      '/user/starred': [
+        { full_name: 'vuejs/core', description: 'Vue', stargazers_count: 48000, private: false, html_url: 'u1' },
+        { full_name: 'langchain-ai/langchain', description: 'LLM apps', stargazers_count: 90000, private: false, html_url: 'u2' },
+      ],
+    })
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false })
+    expect(tools.map(t => t.name)).toContain('github_list_starred')
+
+    const result = (await toolByName(tools, 'github_list_starred').execute({}, EXEC)) as {
+      count: number
+      repos: Array<Record<string, unknown>>
+    }
+    expect(result.count).toBe(2)
+    expect(result.repos[0]).toMatchObject({ full_name: 'vuejs/core', stars: 48000 })
+  })
+
   it('github_create_release posts the tag and projects the release url', async () => {
     let posted: Record<string, unknown> | undefined
     const fetchImpl = (url: string | URL, init?: RequestInit): Promise<Response> => {
