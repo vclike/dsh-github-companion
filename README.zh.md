@@ -115,10 +115,14 @@ gate 那一行。
 ```bash
 npm install
 npm run typecheck   # tsc --noEmit
-npm test            # vitest（23 个测试）
+npm test            # vitest（27 个测试，离线）
+npm run test:coverage
 npm run build       # 产出 lib/
 node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于 profile 目录内运行
 ```
+
+贡献约定与 PR 流程见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全披露走
+[SECURITY.md](SECURITY.md)。
 
 ## 测试
 

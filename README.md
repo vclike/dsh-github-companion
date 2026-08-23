@@ -3,6 +3,9 @@
 DeepSeek Harness plugin: native GitHub REST tools for agents, plus a companion
 permission-gate example plugin.
 
+[![CI](https://github.com/vclike/dsh-plugin-github/actions/workflows/ci.yml/badge.svg)](https://github.com/vclike/dsh-plugin-github/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 English | [中文](README.zh.md)
 
 ## What you get
@@ -122,10 +125,14 @@ Then set your token and (optionally) trim the gate row from your profile's
 ```bash
 npm install
 npm run typecheck   # tsc --noEmit
-npm test            # vitest (23 tests)
+npm test            # vitest (27 tests, offline)
+npm run test:coverage
 npm run build       # emit lib/
 node scripts/verify-load.mjs   # run inside a profile dir after `dsh plugin add`
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and PR flow; security
+disclosure goes through [SECURITY.md](SECURITY.md).
 
 ## Testing
 
