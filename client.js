@@ -60,6 +60,18 @@ window.__ModuleLoader__.load({
 				'.dsh-gh-error{font-size:12px;line-height:1.5;color:#e5534b}',
 				'.dsh-gh-badge{display:inline-block;font-size:10px;border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:middle;',
 				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));opacity:.75}',
+				'.dsh-gh-btn.small{padding:2px 10px;font-size:11px}',
+				'.dsh-gh-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
+				'.dsh-gh-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border-radius:999px;padding:2px 10px;',
+				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
+				'background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent))}',
+				'.dsh-gh-chip.suggest{border-style:dashed;cursor:pointer;opacity:.85}',
+				'.dsh-gh-chip.suggest:hover{opacity:1}',
+				'.dsh-gh-chip-x{cursor:pointer;border:none;background:none;color:inherit;font:inherit;font-size:12px;',
+				'padding:0 0 0 2px;line-height:1}',
+				'.dsh-gh-help{font-size:12px;line-height:1.6;padding:10px 12px;border:1px dashed var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
+				'border-radius:8px;background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent))}',
+				'.dsh-gh-help a{color:#4c8dff;text-decoration:none}.dsh-gh-help a:hover{text-decoration:underline}',
 			].join('')
 			document.head.appendChild(style)
 		}
@@ -93,6 +105,23 @@ window.__ModuleLoader__.load({
 			return secrets.some(s => Array.isArray(s.path) && s.path.join('.') === field && s.set === true)
 		}
 
+		/**
+		 * Native OS folder chooser via the host's wire-facing workspaces service
+		 * (same surface the shipped directory pickers use). Returns an absolute
+		 * path, or null when the surface is unavailable / the user cancelled.
+		 */
+		async function pickDirectory(conn) {
+			try {
+				const api = conn && conn.api
+				const workspaces = api && (api.workspaces || (api.services && api.services.workspaces))
+				if (!workspaces || typeof workspaces.pickDirectory !== 'function') return null
+				const picked = await workspaces.pickDirectory({})
+				return typeof picked === 'string' ? picked : null
+			} catch {
+				return null
+			}
+		}
+
 		function makePanel(getConnection) {
 			const h = react.createElement
 			const { useState, useEffect } = react
@@ -120,21 +149,26 @@ window.__ModuleLoader__.load({
 
 			function TokenRow({ tools, busy, onWrite }) {
 				const [draft, setDraft] = useState('')
+				const [helpOpen, setHelpOpen] = useState(false)
 				const configured = secretSet(tools, 'token')
 				return h('div', { className: 'dsh-gh-row stack' },
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, 'GitHub Token（PAT）',
 							h('span', { className: 'dsh-gh-badge' }, configured ? '已设置' : '未设置')),
 							h('span', { className: 'dsh-gh-hint' },
-								'保存后立即生效，优先于 GITHUB_TOKEN 环境变量；令牌只写入服务端配置文件，界面不回显。'),
+								'首次配置点右侧 ？ 有新手指引；令牌保存后不回显，立即生效。'),
 						),
 					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
 							className: 'dsh-gh-input', type: 'password', spellCheck: false,
-							placeholder: configured ? '••••••••（输入新值可覆盖）' : '粘贴 PAT（生成后粘贴到这里）',
+							placeholder: configured ? '••••••••（输入新值可覆盖）' : '粘贴 PAT',
 							value: draft, disabled: busy,
 							onChange: e => setDraft(e.target.value),
 						}),
+						h('button', {
+							className: 'dsh-gh-btn small', title: '新手指引：如何创建令牌',
+							onClick: () => setHelpOpen(v => !v),
+						}, helpOpen ? '收起' : '？'),
 						h('button', {
 							className: 'dsh-gh-btn primary', disabled: busy || !draft.trim(),
 							onClick: () => onWrite({ op: 'set', path: ['token'], value: draft.trim() }, () => setDraft('')),
@@ -144,48 +178,99 @@ window.__ModuleLoader__.load({
 							onClick: () => onWrite({ op: 'unset', path: ['token'] }),
 						}, '清除') : null,
 					),
-					h('span', { className: 'dsh-gh-hint' },
-						'新手一键创建（推荐，权限已预选）：',
-						h('a', { href: 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github', target: '_blank', rel: 'noreferrer' }, '点此生成经典令牌'),
-						'——打开即勾好 repo+workflow，拉到底点 Generate token，复制结果粘贴到上面。需逐仓精细控制时用',
-						h('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noreferrer' }, '细粒度令牌（手动配权限）'),
-						'。',
-					),
+					helpOpen ? h('div', { className: 'dsh-gh-help' },
+						h('div', null,
+							'新手一键创建（推荐，权限已预选，覆盖插件全部功能，含自动建仓）：',
+							h('a', { href: 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github', target: '_blank', rel: 'noreferrer' }, '点此生成经典令牌'),
+							' —— 打开即勾好 repo + workflow，拉到底点 Generate token，复制结果粘贴到上面即可。'),
+						h('div', { style: { marginTop: 6 } },
+							'需逐仓精细控制时用 ',
+							h('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noreferrer' }, '细粒度令牌'),
+							'，手动勾选：Metadata R、Contents RW、Issues RW、Pull requests RW、Workflows RW；要自动建仓再加 Administration RW。'),
+						h('div', { style: { marginTop: 6 } },
+							'令牌只写入本机服务端配置文件，界面永不回显；清除后回落到环境变量 GITHUB_TOKEN。'),
+					) : null,
 				)
 			}
 
 
+			/** Read-only tools commonly worth exempting when the gate is set to "all". */
+			const SUGGESTED_EXEMPT = [
+				'github_get_me', 'github_get_file_contents', 'github_search_repositories',
+				'github_search_code', 'github_list_issues', 'github_latest_release',
+				'github_list_starred', 'github_list_forks',
+			]
+
 			function ExcludeToolsRow({ gate, busy, onWrite }) {
 				const current = Array.isArray(gate.value && gate.value.excludeTools)
-					? gate.value.excludeTools.join(', ') : ''
-				const [draft, setDraft] = useState(null)
-				const text = draft === null ? current : draft
+					? gate.value.excludeTools : []
+				const [draft, setDraft] = useState('')
+				const removeOne = name =>
+					onWrite({ op: 'set', path: ['excludeTools'], value: current.filter(n => n !== name) }, () => {})
+				const addOne = raw => {
+					const v = String(raw || '').trim()
+					if (!v || current.includes(v)) return
+					onWrite({ op: 'set', path: ['excludeTools'], value: [...current, v] }, () => setDraft(''))
+				}
+				const suggestions = SUGGESTED_EXEMPT.filter(n => !current.includes(n))
 				return h('div', { className: 'dsh-gh-row stack' },
 					h('div', { className: 'dsh-gh-labels' },
-						h('span', null, '豁免工具（精确名，逗号分隔）'),
-						h('span', { className: 'dsh-gh-hint' }, '例如：github_search_issues, github_get_me'),
+						h('span', null, '豁免工具（免审批）',
+							h('span', { className: 'dsh-gh-badge' }, String(current.length))),
+						h('span', { className: 'dsh-gh-hint' }, '点 × 移除；点虚线胶囊加入。只建议豁免只读工具。'),
 					),
+					current.length
+						? h('div', { className: 'dsh-gh-chips' },
+							current.map(name => h('span', { key: name, className: 'dsh-gh-chip' },
+								name,
+								h('button', {
+									className: 'dsh-gh-chip-x', title: '移除 ' + name, disabled: busy,
+									onClick: () => removeOne(name),
+								}, '×'))))
+						: h('div', { className: 'dsh-gh-muted' }, '当前没有豁免——门控范围内的每次调用都会弹审批。'),
+					suggestions.length
+						? h('div', { className: 'dsh-gh-chips' },
+							h('span', { className: 'dsh-gh-hint' }, '常用只读：'),
+							suggestions.map(name => h('button', {
+								key: name, className: 'dsh-gh-chip suggest', disabled: busy, title: '加入豁免',
+								onClick: () => addOne(name),
+							}, '+ ' + name)))
+						: null,
 					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
-							className: 'dsh-gh-input', spellCheck: false, value: text, disabled: busy,
+							className: 'dsh-gh-input', spellCheck: false, value: draft, disabled: busy,
+							placeholder: '自定义工具名，如 github_get_pull_request',
 							onChange: e => setDraft(e.target.value),
 						}),
 						h('button', {
-							className: 'dsh-gh-btn primary', disabled: busy || draft === null,
-							onClick: () => {
-								const list = text.split(',').map(s => s.trim()).filter(Boolean)
-								onWrite({ op: 'set', path: ['excludeTools'], value: list }, () => setDraft(null))
-							},
-						}, '保存'))
-					)
+							className: 'dsh-gh-btn primary', disabled: busy || !draft.trim(),
+							onClick: () => addOne(draft),
+						}, '添加'))
+				)
 			}
 
 			/** Single-line text setting; saves on button press (draft === null = clean). */
-			function TextRow({ label, hint, placeholder, field, value, badge, busy, onWrite }) {
+			function TextRow({ label, hint, placeholder, field, value, badge, busy, onWrite, onBrowse }) {
 				const current = typeof value === 'string' ? value : ''
 				const [draft, setDraft] = useState(null)
+				const [browsing, setBrowsing] = useState(false)
 				const text = draft === null ? current : draft
 				const dirty = draft !== null && draft.trim() !== current
+				const browse = async () => {
+					if (typeof onBrowse !== 'function') return
+					setBrowsing(true)
+					try {
+						const picked = await onBrowse()
+						if (typeof picked === 'string' && picked.trim()) {
+							setDraft(picked.trim())
+							onWrite({ op: 'set', path: [field], value: picked.trim() }, () => setDraft(null))
+						}
+					} catch {
+						// chooser unavailable or cancelled — keep manual input usable
+					} finally {
+						setBrowsing(false)
+					}
+				}
 				return h('div', { className: 'dsh-gh-row stack' },
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, label,
@@ -194,9 +279,13 @@ window.__ModuleLoader__.load({
 					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
 							className: 'dsh-gh-input', spellCheck: false, value: text,
-							placeholder: placeholder || '', disabled: busy,
+							placeholder: placeholder || '', disabled: busy || browsing,
 							onChange: e => setDraft(e.target.value),
 						}),
+						onBrowse ? h('button', {
+							className: 'dsh-gh-btn small', disabled: busy || browsing,
+							onClick: () => void browse(),
+						}, browsing ? '…' : '浏览…') : null,
 						dirty ? h('button', {
 							className: 'dsh-gh-btn primary', disabled: busy,
 							onClick: () => onWrite({ op: 'set', path: [field], value: draft.trim() }, () => setDraft(null)),
@@ -283,13 +372,14 @@ window.__ModuleLoader__.load({
 							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableRepoCreation'], value: v }),
 						}),
 						h(TextRow, {
-							label: '本地工作区目录', field: 'workspaceRoot',
+							label: '默认克隆目录', field: 'workspaceRoot',
 							badge: t.value && typeof t.value.workspaceRoot === 'string' && t.value.workspaceRoot.trim()
 								? '已设置' : '未设置',
-							hint: '克隆/检出的仓库放这里。留空 = 无约定，agent 每次会问；目录不存在时克隆会自动创建。',
+							hint: '克隆落点优先级：当前会话的工作区 → 此目录 → 询问你。适合存放临时参考的克隆；目录不存在时自动创建。',
 							placeholder: '例如 D:\\work_space\\github',
 							value: t.value && t.value.workspaceRoot, busy,
 							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
+							onBrowse: () => pickDirectory(getConnection()),
 						}),
 						h(TextRow, {
 							label: 'API 代理', field: 'proxyUrl',

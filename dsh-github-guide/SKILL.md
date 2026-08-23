@@ -13,6 +13,11 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 - `authenticated: false` → 匿名模式：只能读公开数据且限速 60 req/h。继续做只读任务，
   同时提醒用户在设置界面保存 PAT 以解锁全部能力。
 
+**克隆落点优先级**（涉及把仓库下载到本地时）：① 当前会话已打开的工作区目录 →
+② 设置里的"默认克隆目录"（`workspace.workspace_root`，配合 `workspace.exists` /
+`workspace.projects` 判断）→ ③ 都没有才询问用户。临时参考性质的克隆优先落在当前
+工作区，不要污染用户的默认目录。
+
 ## 1. 能力与开关地图
 
 | 层 | 工具 | 注册条件 | 备注 |

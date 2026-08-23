@@ -108,10 +108,12 @@ Fine-grained tokens）：
 两个插件各自注册了设置命名空间，会渲染在 DSH 设置界面中：
 
 - `github-tools`：`enableIssueWrites`、`enableGitDataTools`、`enableRepoCreation`、
-  `workspaceRoot`（克隆/检出的本地根目录；留空 = 无约定，agent 每次询问；agent 经
-  `github_get_me` 读取该路径）、`proxyUrl`（访问 api.github.com 的可选 HTTP(S) 代理
+  `workspaceRoot`（**默认克隆目录**——克隆落点优先级：当前会话的工作区 → 此目录 →
+  询问；目录不存在时自动创建。agent 经 `github_get_me` 读取该路径与状态）、
+  `proxyUrl`（访问 api.github.com 的可选 HTTP(S) 代理
   ——Node 的 fetch 不读系统代理，需要时在此显式填写；改动实时生效）
 - `github-gate`：`mode`（`off|writes|all`）、`action`（`ask|deny`）、`excludeTools`
+  （设置卡片以胶囊形式增删，附常用只读工具建议）
 
 组合层默认值来自 cordis.yml 插入行（`base` 层）；修改实时生效。
 

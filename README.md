@@ -117,11 +117,14 @@ Verify by asking the agent anything about your GitHub account —
 Both plugins register settings namespaces rendered by the DSH settings UI:
 
 - `github-tools`: `enableIssueWrites`, `enableGitDataTools`, `enableRepoCreation`,
-  `workspaceRoot` (local root for cloned/checked-out repos; empty = no convention —
-  the agent asks each time; surfaced to the agent via `github_get_me`), and
+  `workspaceRoot` (**default clone directory** — clone destination priority:
+  the current session's workspace → this directory → ask; created on first
+  clone. Surfaced to the agent via `github_get_me`), and
   `proxyUrl` (optional HTTP(S) proxy for api.github.com — Node's fetch ignores
   system proxy settings, so set this explicitly if you need one; applies live)
 - `github-gate`: `mode` (`off|writes|all`), `action` (`ask|deny`), `excludeTools`
+  (managed as removable pills in the settings card, with common read-only
+  suggestions)
 
 Composition defaults come from the cordis.yml insert rows (`base` layer);
 changes apply live.

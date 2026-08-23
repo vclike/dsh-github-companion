@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2 (2026-08-23)
+
+Settings-card UX pass from first real usage.
+
+- Default clone directory: renamed from 本地工作区目录, native folder-picker
+  button (host `workspaces.pickDirectory`), and clone-destination priority
+  codified in the usage skill: current session workspace → configured
+  directory → ask.
+- GitHub Token: long inline guidance moved into a ？ help popover; the
+  one-click classic-token link now states it covers every plugin feature
+  (repo + workflow scopes include repo creation).
+- Exempt tools: pill UI — removable chips for current entries plus one-tap
+  suggestions for common read-only tools (replaces comma-separated input).
+- Usage skill documents the workspace probe (`workspace.exists/projects`).
+
 ## 0.4.1 (2026-08-23)
 
 Settings-card polish + workspace probe.
