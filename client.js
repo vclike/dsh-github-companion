@@ -114,20 +114,22 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Native OS folder chooser via the host's wire-facing workspaces service
-		 * (same surface the shipped directory pickers use). Returns an absolute
-		 * path, or null when the surface is unavailable / the user cancelled.
+		 * Native OS folder chooser via the connection's `host.pickDirectory`
+		 * RPC (the same surface the shipped directory pickers ride on).
+		 * Resolves an absolute path; resolves null when the user cancelled;
+		 * THROWS with a readable message when the surface is missing — TextRow
+		 * shows that instead of failing silently.
 		 */
 		async function pickDirectory(conn) {
-			try {
-				const api = conn && conn.api
-				const workspaces = api && (api.workspaces || (api.services && api.services.workspaces))
-				if (!workspaces || typeof workspaces.pickDirectory !== 'function') return null
-				const picked = await workspaces.pickDirectory({})
-				return typeof picked === 'string' ? picked : null
-			} catch {
-				return null
+			const api = conn && conn.api
+			const host = api && api.host
+			if (!host || typeof host.pickDirectory !== 'function') {
+				throw new Error('此宿主未提供目录选择器（host.pickDirectory 不可用），请手动输入路径')
 			}
+			let res = await host.pickDirectory({})
+			if (res && typeof res === 'object' && 'result' in res) res = res.result
+			if (res && typeof res.path === 'string') return res.path
+			return null
 		}
 
 		function makePanel(getConnection) {
@@ -304,19 +306,21 @@ window.__ModuleLoader__.load({
 				const current = typeof value === 'string' ? value : ''
 				const [draft, setDraft] = useState(null)
 				const [browsing, setBrowsing] = useState(false)
+				const [browseMsg, setBrowseMsg] = useState('')
 				const text = draft === null ? current : draft
 				const dirty = draft !== null && draft.trim() !== current
 				const browse = async () => {
 					if (typeof onBrowse !== 'function') return
 					setBrowsing(true)
+					setBrowseMsg('')
 					try {
 						const picked = await onBrowse()
 						if (typeof picked === 'string' && picked.trim()) {
 							setDraft(picked.trim())
 							onWrite({ op: 'set', path: [field], value: picked.trim() }, () => setDraft(null))
 						}
-					} catch {
-						// chooser unavailable or cancelled — keep manual input usable
+					} catch (error) {
+						setBrowseMsg(String((error && error.message) || error))
 					} finally {
 						setBrowsing(false)
 					}
@@ -341,6 +345,7 @@ window.__ModuleLoader__.load({
 							onClick: () => onWrite({ op: 'set', path: [field], value: draft.trim() }, () => setDraft(null)),
 						}, '保存') : null,
 					),
+					browseMsg ? h('div', { className: 'dsh-gh-flash' }, browseMsg) : null,
 				)
 			}
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.4 (2026-08-23)
+
+Fix: folder picker was a silent no-op.
+
+- Root cause: the browse button probed `api.workspaces.pickDirectory`, a
+  namespace that does not exist on the client connection; the real surface
+  is `host.pickDirectory` (returns `{ path }`, null = cancelled). Rewired
+  to the correct RPC and made failures visible next to the input instead
+  of swallowing them.
+
 ## 0.4.3 (2026-08-23)
 
 Settings card restyled to the shipped design language.
