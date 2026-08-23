@@ -25,54 +25,62 @@ window.__ModuleLoader__.load({
 			const style = document.createElement('style')
 			style.id = 'dsh-gh-settings-style'
 			style.textContent = [
-				'.dsh-gh{display:flex;flex-direction:column;gap:14px;width:100%;max-width:560px;',
-				'color:var(--dsw-alias-label-primary,inherit);line-height:1.5;font-size:13px}',
-				'.dsh-gh-group{display:flex;flex-direction:column;gap:4px;padding:12px 14px;',
-				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.35));border-radius:10px;',
-				'background:var(--dsw-alias-bg-layer-1,transparent)}',
-				'.dsh-gh-title{margin:0 0 6px;font-size:14px;font-weight:600;line-height:1.4}',
-				'.dsh-gh-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;min-height:34px}',
-				'.dsh-gh-row.stack{flex-direction:column;align-items:stretch;gap:8px}',
-				'.dsh-gh-inputrow{display:flex;align-items:flex-start;gap:8px;min-height:30px}',
-				'.dsh-gh-inputrow .dsh-gh-input{flex:1 1 auto}',
-				'.dsh-gh-inputrow .dsh-gh-btn{flex:0 0 auto}',
-				'.dsh-gh-labels{display:flex;flex-direction:column;min-width:0}',
-				'.dsh-gh-hint{font-size:11px;opacity:.62;line-height:1.45;margin-top:1px}',
-				'.dsh-gh-hint a{color:#4c8dff;text-decoration:none}.dsh-gh-hint a:hover{text-decoration:underline}',
-				'.dsh-gh-select,.dsh-gh-input{font:inherit;font-size:13px;color:var(--dsw-alias-label-primary,inherit);',
-				'background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent));',
-				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
-				'border-radius:8px;padding:5px 9px;min-width:0}',
-				'.dsh-gh-select{cursor:pointer}',
-				// Native dropdown lists ignore inherited transparency in dark mode;
-				// give <option> explicit light-surface colors so text stays readable.
-				'.dsh-gh-select option{color:#1f2328;background:#ffffff}',
-				'.dsh-gh-input:focus,.dsh-gh-select:focus{outline:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.6))}',
-				'.dsh-gh-check{width:17px;height:17px;cursor:pointer;accent-color:var(--dsw-alias-label-primary,#111)}',
-				'.dsh-gh-btn{cursor:pointer;font:inherit;font-size:12px;border-radius:999px;padding:4px 14px;',
-				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
-				'background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent));',
-				'color:var(--dsw-alias-label-primary,inherit)}',
-				'.dsh-gh-btn.primary{background:var(--dsw-alias-label-primary,#111);',
-				'color:var(--dsw-alias-label-primary-foreground,#fff)}',
-				'.dsh-gh-btn:disabled{opacity:.5;cursor:default}',
-				'.dsh-gh-muted{font-size:11px;opacity:.62;line-height:1.5}',
-				'.dsh-gh-error{font-size:12px;line-height:1.5;color:#e5534b}',
-				'.dsh-gh-badge{display:inline-block;font-size:10px;border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:middle;',
-				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));opacity:.75}',
-				'.dsh-gh-btn.small{padding:2px 10px;font-size:11px}',
-				'.dsh-gh-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
-				'.dsh-gh-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border-radius:999px;padding:2px 10px;',
-				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
-				'background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent))}',
-				'.dsh-gh-chip.suggest{border-style:dashed;cursor:pointer;opacity:.85}',
-				'.dsh-gh-chip.suggest:hover{opacity:1}',
-				'.dsh-gh-chip-x{cursor:pointer;border:none;background:none;color:inherit;font:inherit;font-size:12px;',
-				'padding:0 0 0 2px;line-height:1}',
-				'.dsh-gh-help{font-size:12px;line-height:1.6;padding:10px 12px;border:1px dashed var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
-				'border-radius:8px;background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent))}',
-				'.dsh-gh-help a{color:#4c8dff;text-decoration:none}.dsh-gh-help a:hover{text-decoration:underline}',
-			].join('')
+			'.dsh-gh{display:flex;flex-direction:column;gap:20px;width:100%;max-width:640px;',
+			'color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px}',
+			'.dsh-gh-title{margin:0 0 4px;font-size:14px;font-weight:600;line-height:22px}',
+			'.dsh-gh-group{display:flex;flex-direction:column}',
+			'.dsh-gh-row{display:flex;align-items:center;justify-content:space-between;gap:8px;',
+			'padding:16px 0;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.25))}',
+			'.dsh-gh-row.stack{flex-direction:column;align-items:stretch;gap:8px}',
+			'.dsh-gh-labels{display:flex;flex-direction:column;gap:4px;min-width:0;padding-right:24px}',
+			'.dsh-gh-row.stack .dsh-gh-labels{padding-right:0}',
+			'.dsh-gh-hint{font-size:12px;font-weight:400;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+			'.dsh-gh-hint a,.dsh-gh-help a{color:#4c8dff;text-decoration:none}',
+			'.dsh-gh-hint a:hover,.dsh-gh-help a:hover{text-decoration:underline}',
+			'.dsh-gh-inputrow{display:flex;align-items:center;gap:8px}',
+			'.dsh-gh-inputrow .dsh-gh-input{flex:1 1 auto;height:36px}',
+			'.dsh-gh-inputrow .dsh-gh-btn{flex:0 0 auto;height:32px}',
+			'.dsh-gh-select,.dsh-gh-input{font:inherit;font-size:14px;color:var(--dsw-alias-label-primary);',
+			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
+			'border:none;border-radius:18px;padding:0 14px;min-width:0}',
+			'.dsh-gh-select{cursor:pointer}',
+			'.dsh-gh-select option{color:#1f2328;background:#ffffff}',
+			'.dsh-gh-input:focus,.dsh-gh-select:focus{outline:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.45))}',
+			'.dsh-gh-btn{cursor:pointer;font:inherit;font-size:13px;line-height:22px;padding:0 14px;',
+			'border:none;border-radius:999px;white-space:nowrap;flex:0 0 auto;',
+			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
+			'color:var(--dsw-alias-label-primary)}',
+			'.dsh-gh-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2,transparent))}',
+			'.dsh-gh-btn.primary{background:var(--dsw-alias-label-primary,#111);',
+			'color:var(--dsw-alias-label-primary-foreground,#fff)}',
+			'.dsh-gh-btn.primary:hover:not(:disabled){opacity:.9;background:var(--dsw-alias-label-primary,#111)}',
+			'.dsh-gh-btn:disabled{opacity:.5;cursor:default}',
+			'.dsh-gh-btn.small{height:28px;padding:0 10px;font-size:12px}',
+			'.dsh-gh-badge{display:inline-block;font-size:11px;line-height:16px;border-radius:999px;',
+			'padding:0 8px;margin-left:8px;vertical-align:middle;',
+			'border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
+			'color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+			'.dsh-gh-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}',
+			'.dsh-gh-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;',
+			'border-radius:999px;font-size:12px;line-height:18px;white-space:nowrap;',
+			'border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
+			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
+			'color:var(--dsw-alias-label-primary);font-family:inherit}',
+			'.dsh-gh-chip.suggest{border-style:dashed;cursor:pointer;',
+			'color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+			'.dsh-gh-chip.suggest:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,transparent);',
+			'color:var(--dsw-alias-label-primary)}',
+			'.dsh-gh-chip-x{cursor:pointer;border:none;background:none;color:inherit;font:inherit;',
+			'font-size:13px;padding:0 0 0 2px;line-height:1}',
+			'.dsh-gh-help{font-size:12px;line-height:18px;padding:12px 14px;',
+			'border:1px dashed var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:10px;',
+			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-1,transparent));',
+			'color:var(--dsw-alias-label-primary)}',
+			'.dsh-gh-flash{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+			'.dsh-gh-muted{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+			'.dsh-gh-error{font-size:12px;line-height:1.5;color:#e5534b}',
+			'.dsh-gh-check{width:17px;height:17px;cursor:pointer;accent-color:var(--dsw-alias-label-primary,#111)}',
+		].join('')
 			document.head.appendChild(style)
 		}
 
@@ -155,8 +163,8 @@ window.__ModuleLoader__.load({
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, 'GitHub Token（PAT）',
 							h('span', { className: 'dsh-gh-badge' }, configured ? '已设置' : '未设置')),
-							h('span', { className: 'dsh-gh-hint' },
-								'首次配置点右侧 ？ 有新手指引；令牌保存后不回显，立即生效。'),
+							!configured ? h('span', { className: 'dsh-gh-hint' },
+								'还没有令牌？点「提示」有新手指引，一键创建、权限自动勾好。') : null,
 						),
 					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
@@ -166,19 +174,19 @@ window.__ModuleLoader__.load({
 							onChange: e => setDraft(e.target.value),
 						}),
 						h('button', {
-							className: 'dsh-gh-btn small', title: '新手指引：如何创建令牌',
-							onClick: () => setHelpOpen(v => !v),
-						}, helpOpen ? '收起' : '？'),
-						h('button', {
 							className: 'dsh-gh-btn primary', disabled: busy || !draft.trim(),
 							onClick: () => onWrite({ op: 'set', path: ['token'], value: draft.trim() }, () => setDraft('')),
 						}, '保存'),
-						configured ? h('button', {
-							className: 'dsh-gh-btn', disabled: busy,
-							onClick: () => onWrite({ op: 'unset', path: ['token'] }),
-						}, '清除') : null,
+						configured
+							? h('button', {
+								className: 'dsh-gh-btn', disabled: busy,
+								onClick: () => onWrite({ op: 'unset', path: ['token'] }),
+							}, '清除')
+							: h('button', {
+								className: 'dsh-gh-btn', onClick: () => setHelpOpen(v => !v),
+							}, helpOpen ? '收起提示' : '提示'),
 					),
-					helpOpen ? h('div', { className: 'dsh-gh-help' },
+					helpOpen && !configured ? h('div', { className: 'dsh-gh-help' },
 						h('div', null,
 							'新手一键创建（推荐，权限已预选，覆盖插件全部功能，含自动建仓）：',
 							h('a', { href: 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github', target: '_blank', rel: 'noreferrer' }, '点此生成经典令牌'),
@@ -188,11 +196,40 @@ window.__ModuleLoader__.load({
 							h('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noreferrer' }, '细粒度令牌'),
 							'，手动勾选：Metadata R、Contents RW、Issues RW、Pull requests RW、Workflows RW；要自动建仓再加 Administration RW。'),
 						h('div', { style: { marginTop: 6 } },
-							'令牌只写入本机服务端配置文件，界面永不回显；清除后回落到环境变量 GITHUB_TOKEN。'),
+							'令牌只写入本机服务端配置文件，界面永不回显。'),
 					) : null,
 				)
 			}
 
+
+			/** One-line Chinese description per tool — hover tooltip + click feedback. */
+			const TOOL_DESC = {
+				github_get_me: '查询登录身份与凭证状态',
+				github_get_repository: '查看仓库信息',
+				github_get_file_contents: '读取仓库文件',
+				github_list_commits: '列出提交历史',
+				github_search_repositories: '搜索仓库',
+				github_search_code: '搜索代码',
+				github_search_issues: '搜索议题和 PR',
+				github_list_issues: '列出开放议题',
+				github_get_issue: '查看单个议题',
+				github_list_releases: '列出发布版本',
+				github_latest_release: '查最新发布版本',
+				github_list_starred: '读取 star 列表',
+				github_list_forks: '读取我的 fork 及上游动态',
+				github_list_watched: '读取 watch 订阅列表',
+				github_create_issue: '创建新议题',
+				github_update_issue: '修改或关闭议题',
+				github_add_issue_comment: '给议题写评论',
+				github_create_branch: '创建分支',
+				github_create_or_update_file: '提交单个文件改动',
+				github_push_files: '多文件一次提交',
+				github_create_pull_request: '发起 PR',
+				github_create_release: '打 tag 并发版',
+				github_sync_fork: '把 fork 同步到上游最新',
+				github_create_repository: '自动新建私有仓库',
+			}
+			const toolDesc = name => TOOL_DESC[name] || ('调用工具 ' + name)
 
 			/** Read-only tools commonly worth exempting when the gate is set to "all". */
 			const SUGGESTED_EXEMPT = [
@@ -205,34 +242,47 @@ window.__ModuleLoader__.load({
 				const current = Array.isArray(gate.value && gate.value.excludeTools)
 					? gate.value.excludeTools : []
 				const [draft, setDraft] = useState('')
-				const removeOne = name =>
+				const [flash, setFlash] = useState('')
+				useEffect(() => {
+					if (!flash) return
+					const timer = setTimeout(() => setFlash(''), 3500)
+					return () => clearTimeout(timer)
+				}, [flash])
+				const removeOne = name => {
 					onWrite({ op: 'set', path: ['excludeTools'], value: current.filter(n => n !== name) }, () => {})
+					setFlash('已恢复审批：' + toolDesc(name))
+				}
 				const addOne = raw => {
 					const v = String(raw || '').trim()
 					if (!v || current.includes(v)) return
 					onWrite({ op: 'set', path: ['excludeTools'], value: [...current, v] }, () => setDraft(''))
+					setFlash('已免审批：' + toolDesc(v))
 				}
 				const suggestions = SUGGESTED_EXEMPT.filter(n => !current.includes(n))
 				return h('div', { className: 'dsh-gh-row stack' },
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, '豁免工具（免审批）',
 							h('span', { className: 'dsh-gh-badge' }, String(current.length))),
-						h('span', { className: 'dsh-gh-hint' }, '点 × 移除；点虚线胶囊加入。只建议豁免只读工具。'),
+						h('span', { className: 'dsh-gh-hint' }, '悬停可看用途；点 × 移除，点虚线胶囊加入。只建议豁免只读工具。'),
 					),
 					current.length
 						? h('div', { className: 'dsh-gh-chips' },
-							current.map(name => h('span', { key: name, className: 'dsh-gh-chip' },
+							current.map(name => h('span', {
+								key: name, className: 'dsh-gh-chip', title: toolDesc(name),
+							},
 								name,
 								h('button', {
-									className: 'dsh-gh-chip-x', title: '移除 ' + name, disabled: busy,
+									className: 'dsh-gh-chip-x', title: '移除（恢复审批）', disabled: busy,
 									onClick: () => removeOne(name),
 								}, '×'))))
 						: h('div', { className: 'dsh-gh-muted' }, '当前没有豁免——门控范围内的每次调用都会弹审批。'),
+					flash ? h('div', { className: 'dsh-gh-flash' }, flash) : null,
 					suggestions.length
 						? h('div', { className: 'dsh-gh-chips' },
 							h('span', { className: 'dsh-gh-hint' }, '常用只读：'),
 							suggestions.map(name => h('button', {
-								key: name, className: 'dsh-gh-chip suggest', disabled: busy, title: '加入豁免',
+								key: name, className: 'dsh-gh-chip suggest', disabled: busy,
+								title: toolDesc(name),
 								onClick: () => addOne(name),
 							}, '+ ' + name)))
 						: null,

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.3 (2026-08-23)
+
+Settings card restyled to the shipped design language.
+
+- Adopted the official settings-row tokens (`--dsw-alias-border-l2`,
+  `label-primary/tertiary`, `bg-module-platform`, `interactive-bg-hover`):
+  separator rows, pill controls without hard borders, 14px titles / 12px
+  tertiary descriptions.
+- Token row button states: unset → [保存][提示]; set → [保存][清除]. The
+  beginner guidance lives only behind 提示 and disappears once a token is
+  saved.
+- Exempt-tool pills: fixed cramped spacing, per-tool hover tooltips
+  (one-line Chinese descriptions for every tool), and a transient feedback
+  line on add/remove ("已免审批/已恢复审批：…").
+
 ## 0.4.2 (2026-08-23)
 
 Settings-card UX pass from first real usage.
