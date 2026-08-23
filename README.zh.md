@@ -1,9 +1,41 @@
 # dsh-plugin-github
 
-DeepSeek Harness 插件：为 agent 提供原生 GitHub REST 工具，附一个配套的
-permission-gate 示例插件。
+让 DeepSeek Harness 的 agent 拥有原生 GitHub 能力：追踪开源项目、把自己的
+作品上传为私有仓库、管理 issue / release / fork——全程自然对话，所有写操作
+都有审批门把关。
 
 [English](README.md) | 中文
+
+> 已在 DeepSeek Harness `0.1.0-rc.7` 上验证（见 `peerDependencies` 声明）；
+> 宿主破坏性版本发布后会在此更新兼容结论。
+
+## 它能做什么？
+
+用大白话跟 agent 说需求就行，工具由它自己挑：
+
+| 你说… | agent 会… | 背后调用的工具 |
+|---|---|---|
+| “总结一下我 star 的项目这周有什么更新” | 遍历 star 列表，逐仓查最新版本和提交，汇总成周报 | `list_starred` · `latest_release` · `list_commits` |
+| “某某仓库最近有什么新东西？” | 拉最新 release 说明、近期提交、热门 issue | `latest_release` · `list_commits` · `list_issues` |
+| “把这个本地文件夹上传成一个私有仓库” | 建仓，然后一次性原子提交全部文件 | `create_repository` · `push_files` |
+| “改掉 README 里的错别字，发个 v1.2.1” | 在 main 上改文件并打 tag 发版 | `push_files` · `create_release` |
+| “我的 fork 哪些落后上游了？” | 逐个对比上游并报告，你点头后才同步 | `list_forks` · `sync_fork` |
+| “给上游提个 issue 反馈这个 bug” | 写好标题正文，经你确认后提交 | `create_issue` |
+| “看看某仓库的某个源码文件怎么实现的” | 直接读公开代码、搜代码，不用离开对话 | `get_file_contents` · `search_code` |
+
+**安全模型** —— 读工具恒开；一切写操作（issue/分支/文件/发版/建仓）都经过
+权限门，先弹审批再执行；新建仓库**强制私有**；令牌不会进入子进程或日志。
+没有令牌也能匿名只读公开数据（60 次/小时）。
+
+## 快速上手
+
+```bash
+dsh plugin add dsh-plugin-github        # 装完重启 DSH
+```
+
+1. 打开 DSH 设置 → **GitHub** 区块
+2. 粘贴令牌（[凭证](#凭证)一节有一键申请链接）→ 保存
+3. 随口问一句 *“我最近 star 了什么？”*——答得上来就配置完成了
 
 ## 你会得到
 
@@ -15,9 +47,6 @@ permission-gate 示例插件。
 | `dsh-plugin-github/gate` | `github-permission-gate` | 针对 `github_*` 工具的 `tools/pre-execute` 权限门示例 |
 
 ### 工具清单（共 26 个，按开关注册）
-
-> 已在 DeepSeek Harness `0.1.0-rc.7` 上验证（见 `peerDependencies` 声明）；
-> 宿主破坏性版本发布后会在此更新兼容结论。
 
 **只读/发现** — 恒开：
 `github_get_me`、`github_get_repository`、`github_get_file_contents`、
@@ -190,7 +219,7 @@ dsh plugin add <你的检出目录>/dsh-plugin-github/dsh-github-guide
 ```bash
 npm install
 npm run typecheck   # tsc --noEmit
-npm test            # vitest（27 个测试，离线）
+npm test            # vitest（43 个测试，离线）
 npm run test:coverage
 npm run build       # 产出 lib/
 node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于临时 profile 目录内运行
@@ -204,7 +233,7 @@ node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于临时 profile 目�
 四层，由快到全（不涉及任何付费服务——这里排的只是耗时和搭建成本）：
 
 ```bash
-# L1 — 离线：类型 + 27 个单测（client/tools/gate，mock fetch）
+# L1 — 离线：类型 + 43 个单测（client/tools/gate，mock fetch）
 npm run typecheck && npm test
 
 # L2 — 包能被 profile 的 link 布局加载

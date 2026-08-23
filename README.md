@@ -1,7 +1,8 @@
 # dsh-plugin-github
 
-DeepSeek Harness plugin: native GitHub REST tools for agents, plus a companion
-permission-gate example plugin.
+Give your DeepSeek Harness agent native GitHub abilities: track open-source
+projects, upload your own work as private repos, manage issues / releases /
+forks — from natural conversation, with every write behind an approval gate.
 
 [![CI](https://github.com/vclike/dsh-plugin-github/actions/workflows/ci.yml/badge.svg)](https://github.com/vclike/dsh-plugin-github/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -12,7 +13,38 @@ English | [中文](README.zh.md)
 > `peerDependencies`). Breaking host releases are announced here after a
 > compatibility pass.
 
-## What you get
+## What can it do?
+
+Talk to your agent in plain language — it picks the right tools itself:
+
+| You ask for… | The agent… | Tools fired |
+|---|---|---|
+| “Summarize this week’s changes across my starred projects” | walks your star list, checks each repo’s latest release and commits, writes a digest | `list_starred` · `latest_release` · `list_commits` |
+| “What’s new in owner/repo recently?” | fetches the newest release notes, recent commits and hot issues | `latest_release` · `list_commits` · `list_issues` |
+| “Upload this local folder as a new private repo” | creates the repo, then pushes every file in one atomic commit | `create_repository` · `push_files` |
+| “Fix the README typo and cut v1.2.1” | edits the file on main and tags a release with notes | `push_files` · `create_release` |
+| “Which of my forks are behind upstream?” | compares each fork against its parent, syncs the ones you pick | `list_forks` · `sync_fork` |
+| “Open an issue upstream about this bug” | files a well-formed issue after you approve | `create_issue` |
+| “Show me how repo X implements Y” | reads and searches any public code without leaving the chat | `get_file_contents` · `search_code` |
+
+**Safety model** — read tools are always on; every write (issues, branches,
+files, releases, PRs) goes through a permission gate that pops an approval
+prompt first; created repositories are always **private** by design; the token
+never reaches subprocesses or logs. Without a token everything still works
+read-only against public repos (60 req/h).
+
+## Quick start
+
+```bash
+dsh plugin add dsh-plugin-github        # restart DSH afterwards
+```
+
+1. Open DSH Settings → **GitHub** section.
+2. Paste a token (one-click link in [Credentials](#credentials) below) → save.
+3. Ask the agent something like *“what did I star recently?”* — if it answers
+   with real data, you are set.
+
+## Under the hood
 
 Two cordis plugins in one package:
 
@@ -207,7 +239,7 @@ repo pushes, `already_exists` handling, and why public repos are out of scope.
 ```bash
 npm install
 npm run typecheck   # tsc --noEmit
-npm test            # vitest (27 tests, offline)
+npm test            # vitest (43 tests, offline)
 npm run test:coverage
 npm run build       # emit lib/
 node scripts/verify-load.mjs   # run inside a scratch profile dir after `dsh plugin add`
@@ -222,7 +254,7 @@ Four layers, from quickest to most thorough (no paid services involved —
 this only ranks run time and setup effort):
 
 ```bash
-# L1 — offline: types + 27 unit tests (client/tools/gate, mocked fetch)
+# L1 — offline: types + 43 unit tests (client/tools/gate, mocked fetch)
 npm run typecheck && npm test
 
 # L2 — package loads through a profile's link layout
