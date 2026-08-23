@@ -28,6 +28,10 @@ Two cordis plugins in one package:
 `github_list_pull_requests`, `github_get_pull_request`, `github_create_branch`,
 `github_create_or_update_file`, `github_push_files`, `github_create_pull_request`
 
+**Repo creation** — switchable (`enableRepoCreation`, default **off**):
+`github_create_repository` — always creates a **private** repository (no
+visibility argument exists); requires Administration (rw) on the token.
+
 Canonical results are JSON-safe objects with a top-level `ok` field. GitHub
 domain failures (404/401/403/422…) return `{ ok: false, status, message }`
 instead of throwing, so the model can react programmatically; only network

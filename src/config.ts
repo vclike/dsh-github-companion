@@ -21,6 +21,8 @@ export interface GithubToolsConfig {
   enableIssueWrites: boolean
   /** Composition default for the settings-UI switch (user layer can override). */
   enableGitDataTools: boolean
+  /** Composition default for the settings-UI repo-creation switch (user layer can override). */
+  enableRepoCreation: boolean
 }
 
 export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object({
@@ -32,12 +34,19 @@ export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object(
   maxFileBytes: Schema.number().default(262_144).min(1_024).max(4_194_304).description('Truncate file contents beyond this many bytes'),
   enableIssueWrites: Schema.boolean().default(true).description('Default for the settings-UI issue-write switch'),
   enableGitDataTools: Schema.boolean().default(false).description('Default for the settings-UI git-data-write switch'),
+  enableRepoCreation: Schema.boolean().default(false).description('Default for the settings-UI private-repo-creation switch'),
 })
 
 /** User-editable subset surfaced in the DSH settings UI under namespace `github-tools`. */
 export interface GithubToolsSection {
   enableIssueWrites: boolean
   enableGitDataTools: boolean
+  /**
+   * Allow the agent to create NEW repositories. Hard-constrained to private:
+   * the create tool sends `private: true` unconditionally and offers no
+   * visibility argument — public repos stay a manual web action.
+   */
+  enableRepoCreation: boolean
   /**
    * Inline PAT (write-only in the UI). Empty/absent falls back to the
    * credential reference. Declared WITHOUT a default so the redaction
@@ -49,6 +58,7 @@ export interface GithubToolsSection {
 export const GithubToolsSectionSchema: Schema<GithubToolsSection> = Schema.object({
   enableIssueWrites: Schema.boolean().default(true).description('Allow issue/comment write tools'),
   enableGitDataTools: Schema.boolean().default(false).description('Allow branch/commit/PR write tools'),
+  enableRepoCreation: Schema.boolean().default(false).description('Allow creating new PRIVATE repositories (never public)'),
   token: Schema.string().role('secret').description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),
 })
 

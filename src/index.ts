@@ -34,7 +34,11 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
   const ref = credentialRef(config.credentialRef)
 
   const sectionScope = ctx.settings.register(settingsNamespace('github-tools'), GithubToolsSectionSchema, {
-    base: { enableIssueWrites: config.enableIssueWrites, enableGitDataTools: config.enableGitDataTools },
+    base: {
+      enableIssueWrites: config.enableIssueWrites,
+      enableGitDataTools: config.enableGitDataTools,
+      enableRepoCreation: config.enableRepoCreation,
+    },
     applies: 'live',
   })
 

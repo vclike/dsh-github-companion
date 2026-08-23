@@ -210,9 +210,24 @@ export class GithubApi {
     return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/pulls`, { method: 'POST', body, signal })
   }
 
+  /**
+   * Create a new repository under the authenticated user. PRIVATE is sent
+   * unconditionally — this API surface deliberately cannot create public
+   * repositories; visibility changes stay a manual web action.
+   */
+  createRepository(
+    body: { name: string; description?: string; auto_init?: boolean },
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<unknown>> {
+    return this.client.request('/user/repos', {
+      method: 'POST',
+      body: { ...body, private: true },
+      signal,
+    })
+  }
+
   /** Resolve the commit SHA a branch (`heads/x`) or tag points at. */
-  async resolveRef(owner: string, repo: string, ref: string, signal?: AbortSignal): Promise<string | undefined> {
-    const response = await this.client.request<{ object?: { sha?: string } }>(
+  async resolveRef(owner: string, repo: string, ref: string, signal?: AbortSignal): Promise<string | undefined> {    const response = await this.client.request<{ object?: { sha?: string } }>(
       `/repos/${enc(owner)}/${enc(repo)}/git/ref/${encodePath(ref.replace(/^refs\//, ''))}`,
       { signal },
     )

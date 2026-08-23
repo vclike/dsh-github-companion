@@ -28,6 +28,10 @@ permission-gate 示例插件。
 `github_list_pull_requests`、`github_get_pull_request`、`github_create_branch`、
 `github_create_or_update_file`、`github_push_files`、`github_create_pull_request`
 
+**仓库自动创建** — 可开关（`enableRepoCreation`，默认**关**）：
+`github_create_repository` —— 一律创建**私有**仓库（工具不提供公开选项，公开
+请到网页手动操作）；需令牌带 Administration (rw) 权限。
+
 规范返回值为 JSON 安全对象，带顶层 `ok` 字段。GitHub 领域错误
 （404/401/403/422…）以 `{ ok: false, status, message }` 返回而非抛出，模型可以
 编程化处理；只有网络故障才表现为工具错误。

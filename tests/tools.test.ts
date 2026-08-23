@@ -87,6 +87,35 @@ describe('tool execute contracts', () => {
     expect(calls).toHaveLength(0) // describe() probe only; /user never hit
   })
 
+  it('github_create_repository is absent unless enableRepoCreation is set', async () => {
+    const { api } = makeApi({})
+    const off = buildGithubTools(api, CONFIG, { enableIssueWrites: true, enableGitDataTools: false })
+    expect(off.map(t => t.name)).not.toContain('github_create_repository')
+    const on = buildGithubTools(api, CONFIG, { enableIssueWrites: true, enableGitDataTools: false, enableRepoCreation: true })
+    expect(on.map(t => t.name)).toContain('github_create_repository')
+  })
+
+  it('github_create_repository always sends private:true and projects the result', async () => {
+    const { api, calls } = makeApi({ '/user/repos': { full_name: 'me/tiny-app', html_url: 'https://github.com/me/tiny-app', owner: { login: 'me' } } })
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false, enableRepoCreation: true })
+    const result = await toolByName(tools, 'github_create_repository').execute(
+      { name: 'tiny-app', description: 'scratch', auto_init: true },
+      EXEC,
+    )
+    expect(result).toMatchObject({ ok: true, full_name: 'me/tiny-app', private: true })
+    const init = JSON.parse(String(calls[0]?.init?.body)) as Record<string, unknown>
+    expect(init.private).toBe(true) // hard-constrained: no public path exists
+    expect(init.name).toBe('tiny-app')
+  })
+
+  it('github_create_repository rejects invalid names before any request', async () => {
+    const { api, calls } = makeApi({ '/user/repos': {} })
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false, enableRepoCreation: true })
+    const result = await toolByName(tools, 'github_create_repository').execute({ name: 'bad name!' }, EXEC)
+    expect(result).toMatchObject({ ok: false, status: 400 })
+    expect(calls).toHaveLength(0)
+  })
+
   it('github_get_repository projects repo metadata as JSON-safe values', async () => {
     const { api } = makeApi({
       '/repos/o/r': {

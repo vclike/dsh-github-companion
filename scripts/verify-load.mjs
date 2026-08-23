@@ -114,13 +114,17 @@ for (const required of ['github_get_me', 'github_get_repository', 'github_search
 if (names.includes('github_push_files')) fail('git-data tools must be absent when enableGitDataTools=false')
 if (!toolsCtxReal.namespaces.some(n => n.ns === 'github-tools')) fail('settings namespace github-tools not registered')
 
-// Flip the git-data switch live through the settings scope and re-check.
+// Flip the git-data + repo-creation switches live through the settings scope.
 const ghScope = toolsCtxReal.__scopes.get('github-tools')
-ghScope.update({ enableGitDataTools: true })
+ghScope.update({ enableGitDataTools: true, enableRepoCreation: true })
 await new Promise(resolve => setImmediate(resolve))
 for (const watcher of ghScope.__watchers) watcher(ghScope.get())
-if (!toolsCtxReal.registerToolCalls.map(t => t.name).includes('github_push_files')) {
+const flippedNames = toolsCtxReal.registerToolCalls.map(t => t.name)
+if (!flippedNames.includes('github_push_files')) {
   fail('push_files should appear after enableGitDataTools=true via watch')
+}
+if (!flippedNames.includes('github_create_repository')) {
+  fail('github_create_repository should appear after enableRepoCreation=true via watch')
 }
 
 // Mount the gate plugin and exercise the waterfall.

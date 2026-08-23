@@ -4,7 +4,7 @@
 
 Initial release.
 
-- `github-tools` plugin: 18 GitHub REST tools in three tiers —
+- `github-tools` plugin: 19 GitHub REST tools in three tiers —
   read/discovery (9), issue writes (3, default on), git-data writes (6,
   default off). Credential via `ctx.credentials` env-reference
   (`credentialRef`, default `GITHUB_TOKEN`) resolved per request; settings

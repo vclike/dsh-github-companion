@@ -239,6 +239,11 @@ window.__ModuleLoader__.load({
 							checked: !!(t.value && t.value.enableGitDataTools),
 							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableGitDataTools'], value: v }),
 						}),
+						h(ToggleRow, {
+							label: '自动新建仓库', hint: '允许 agent 创建新的私有仓库（强制 private，无法创建公开仓库；需令牌含 Administration 权限）',
+							checked: !!(t.value && t.value.enableRepoCreation),
+							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableRepoCreation'], value: v }),
+						}),
 						h('div', { className: 'dsh-gh-muted' },
 							'当前凭证来源：' + tokenSource + '。改动实时生效。'),
 					) : null,

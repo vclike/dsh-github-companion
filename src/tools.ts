@@ -126,6 +126,7 @@ export const GITHUB_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'github_create_issue',
   'github_update_issue',
   'github_add_issue_comment',
+  'github_create_repository',
   'github_create_branch',
   'github_create_or_update_file',
   'github_push_files',
@@ -490,6 +491,50 @@ function addIssueCommentTool(api: GithubApi): ToolDefinition {
 // Phase 3 — pulls + git data (gated by enableGitDataTools, default off)
 // ---------------------------------------------------------------------------
 
+/**
+ * Account-level write: create a NEW PRIVATE repository under the
+ * authenticated user. The request hard-codes `private: true` and the tool
+ * exposes no visibility argument — public repos stay a manual web action.
+ */
+function createRepositoryTool(api: GithubApi): ToolDefinition {
+  return defineTool({
+    name: 'github_create_repository',
+    description:
+      'Create a NEW PRIVATE repository under the authenticated user. Always private — this tool cannot create public repositories. Requires the token to carry Administration (rw).',
+    parameters: {
+      name: { type: 'string', required: true, description: 'Repository name (letters, digits, hyphens, underscores, dots)' },
+      description: { type: 'string', description: 'Short repository description' },
+      auto_init: { type: 'boolean', description: 'Initialize with a README so the first upload can target main; defaults to true' },
+    },
+    output: {
+      schema: { type: 'object', properties: {}, additionalProperties: true },
+      render: TEXT_RENDER,
+    },
+    async execute(args, exec): Promise<Value> {
+      const name = typeof args.name === 'string' ? args.name.trim() : ''
+      if (!name || !/^[A-Za-z0-9_.-]+$/.test(name)) {
+        return { ok: false, status: 400, message: 'name is required and may only contain letters, digits, "-", "_" and "."' }
+      }
+      const description = typeof args.description === 'string' ? args.description.trim() : undefined
+      const autoInit = args.auto_init === undefined ? true : args.auto_init === true
+      const response = await api.createRepository(
+        { name, ...(description ? { description } : {}), auto_init: autoInit },
+        exec.signal,
+      )
+      if (!response.ok) return failure(response.status, response.data)
+      const repo = response.data as { full_name?: string; html_url?: string; owner?: { login?: string } }
+      return {
+        ok: true,
+        full_name: repo.full_name ?? null,
+        html_url: repo.html_url ?? null,
+        private: true,
+        owner: repo.owner?.login ?? null,
+        note: 'Created as PRIVATE. Push project files next with github_push_files (owner = your login, repo = the name above).',
+      }
+    },
+  })
+}
+
 function listPullRequestsTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
   return defineTool({
     name: 'github_list_pull_requests',
@@ -706,7 +751,7 @@ function clampPerPage(value: number | undefined, config: GithubToolsConfig): num
 export function buildGithubTools(
   api: GithubApi,
   config: GithubToolsConfig,
-  section: { enableIssueWrites: boolean; enableGitDataTools: boolean },
+  section: { enableIssueWrites: boolean; enableGitDataTools: boolean; enableRepoCreation?: boolean },
 ): ToolDefinition[] {
   const tools = [
     getMeTool(api),
@@ -721,6 +766,9 @@ export function buildGithubTools(
   ]
   if (section.enableIssueWrites) {
     tools.push(createIssueTool(api), updateIssueTool(api), addIssueCommentTool(api))
+  }
+  if (section.enableRepoCreation) {
+    tools.push(createRepositoryTool(api))
   }
   if (section.enableGitDataTools) {
     tools.push(
