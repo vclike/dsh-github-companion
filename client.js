@@ -226,18 +226,21 @@ window.__ModuleLoader__.load({
 				connection = undefined
 			}
 			try {
+				if (!ctx.slots) throw new Error('slots service not injected — is "slots" in this module\'s inject list?')
 				ctx.slots.inject('settings.section', () => ctx.slots.register({
 					name: 'settings.section',
 					id: 'dsh-plugin-github',
 					order: 60,
 					label: () => 'GitHub',
 				}, makePanel(() => connection)))
-			} catch {
-				// Older hosts without the settings.section seat: degrade silently.
+			} catch (error) {
+				// Older hosts without the settings.section seat: degrade audibly
+				// in the browser console but never break the host.
+				console.warn('[dsh-plugin-github] settings card not registered:', String((error && error.message) || error))
 			}
 		}
 
-		module.exports.inject = ['connection']
+		module.exports.inject = ['connection', 'slots']
 		module.exports.apply = apply
 		return module.exports
 	},
