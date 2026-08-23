@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.10 (2026-08-23)
+
+- Approval prompts are now Chinese-first and self-explanatory: each gated
+  ask carries a plain-language action label (e.g. 「一次性提交多个文件到仓库」)
+  next to the tool name and gate mode; denials explain where to adjust.
+- No behavior change — wording only.
+
 ## 0.4.9 (2026-08-23)
 
 The gate now understands the session's trust posture.

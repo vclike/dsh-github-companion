@@ -136,6 +136,20 @@ export const GITHUB_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'github_sync_fork',
 ])
 
+/** Plain-language (Chinese-first) action labels shown in approval prompts. */
+export const GITHUB_WRITE_TOOL_LABELS: Readonly<Record<string, string>> = {
+  github_create_issue: '创建 Issue',
+  github_update_issue: '修改/关闭 Issue',
+  github_add_issue_comment: '在 Issue 下评论',
+  github_create_repository: '新建私有仓库',
+  github_create_branch: '创建分支',
+  github_create_or_update_file: '提交单个文件',
+  github_push_files: '一次性提交多个文件到仓库',
+  github_create_pull_request: '发起 Pull Request',
+  github_create_release: '发布版本 Release',
+  github_sync_fork: '从上游同步 fork（仅快进）',
+}
+
 // ---------------------------------------------------------------------------
 // Phase 1 — read-only discovery
 // ---------------------------------------------------------------------------

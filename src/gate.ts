@@ -23,7 +23,7 @@ import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 
 import { GithubGateSectionSchema, type GithubGateSection } from './config.ts'
-import { GITHUB_WRITE_TOOLS } from './tools.ts'
+import { GITHUB_WRITE_TOOL_LABELS, GITHUB_WRITE_TOOLS } from './tools.ts'
 
 export const name = 'github-permission-gate'
 export const inject = ['tools', 'settings', 'shell', 'approval'] as const
@@ -68,7 +68,7 @@ export function apply(ctx: Context, config: GithubGateSection) {
     if (!gated) return next()
 
     if (current.action === 'deny') {
-      return { kind: 'deny', reason: `GitHub tool '${exec.name}' denied by github-permission-gate (mode=${current.mode}).` }
+      return { kind: 'deny', reason: `GitHub 工具 '${exec.name}' 已被权限门拒绝（模式=${current.mode}）。如需放行可在设置中调整门模式或豁免该工具。` }
     }
     if (fullAccessPosture(ctx)) {
       ctx.logger?.info?.(
@@ -77,7 +77,13 @@ export function apply(ctx: Context, config: GithubGateSection) {
       )
       return next()
     }
-    return { kind: 'ask', reason: `github-permission-gate requests approval for '${exec.name}' (mode=${current.mode}).` }
+    const actionLabel = GITHUB_WRITE_TOOL_LABELS[exec.name]
+    return {
+      kind: 'ask',
+      reason: actionLabel
+        ? `【GitHub 插件】请求执行：${actionLabel}（工具 ${exec.name}，门模式 ${current.mode}）。请在审批框中选择允许或拒绝。`
+        : `github-permission-gate requests approval for '${exec.name}' (mode=${current.mode}).`,
+    }
   })
 
   ctx.logger?.info?.('github-permission-gate ready (mode=%s, action=%s)', current.mode, current.action)
