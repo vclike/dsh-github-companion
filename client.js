@@ -115,10 +115,9 @@ window.__ModuleLoader__.load({
 
 		/**
 		 * Native OS folder chooser via the connection's `host.pickDirectory`
-		 * RPC (the same surface the shipped directory pickers ride on).
-		 * Resolves an absolute path; resolves null when the user cancelled;
-		 * THROWS with a readable message when the surface is missing — TextRow
-		 * shows that instead of failing silently.
+		 * RPC. Wire shape: callUnary returns { result: { ok, value } } where
+		 * value = { path } (path null = user cancelled). Resolves the path,
+		 * null on cancel; THROWS readable errors on failure/no-surface.
 		 */
 		async function pickDirectory(conn) {
 			const api = conn && conn.api
@@ -127,8 +126,13 @@ window.__ModuleLoader__.load({
 				throw new Error('此宿主未提供目录选择器（host.pickDirectory 不可用），请手动输入路径')
 			}
 			let res = await host.pickDirectory({})
-			if (res && typeof res === 'object' && 'result' in res) res = res.result
-			if (res && typeof res.path === 'string') return res.path
+			// unwrap layers: {result:{ok,value}} → value; tolerate bare shapes
+			if (res && typeof res === 'object' && 'result' in res) {
+				const inner = res.result
+				if (inner && inner.ok === false) throw new Error(inner.message || '目录选择请求被宿主拒绝')
+				res = inner && typeof inner === 'object' && 'value' in inner ? inner.value : inner
+			}
+			if (res && typeof res === 'object' && typeof res.path === 'string') return res.path
 			return null
 		}
 

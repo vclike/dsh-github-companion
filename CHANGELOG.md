@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.5 (2026-08-23)
+
+Fix: picked folder never reached the input.
+
+- Root cause: `host.pickDirectory` rides `callUnary`, which wraps every
+  response as `{ result: { ok, value } }` — the path lives at
+  `result.value.path`. The previous unwrap stopped one layer short and
+  treated the real pick as a cancel. Full unwrap chain implemented
+  (envelope → ok check → value → path).
+
 ## 0.4.4 (2026-08-23)
 
 Fix: folder picker was a silent no-op.
