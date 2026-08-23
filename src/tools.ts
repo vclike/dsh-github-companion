@@ -147,6 +147,20 @@ function getMeTool(api: GithubApi): ToolDefinition {
       render: TEXT_RENDER,
     },
     async execute(_args, exec): Promise<Value> {
+      // Auth-state probe first: an unconfigured credential is a normal state
+      // worth answering without burning a rate-limited request (and without
+      // surfacing GitHub's 401 as if something were broken).
+      const { configured } = await api.describeAuth()
+      if (!configured) {
+        return {
+          ok: true,
+          authenticated: false,
+          login: null,
+          name: null,
+          html_url: null,
+          note: 'No credential is configured for this reference. Requests run anonymously: public data only, 60 req/h core limit, and every write tool will fail with 401.',
+        }
+      }
       const response = await api.getAuthenticatedUser(exec.signal)
       if (!response.ok) return failure(response.status, response.data)
       const user = response.data as { login?: string; name?: string; html_url?: string }

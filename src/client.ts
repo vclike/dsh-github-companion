@@ -24,6 +24,13 @@ export interface GithubClientOptions {
    * (public data only, 60 req/h core limit).
    */
   getToken: () => Promise<string | undefined>
+  /**
+   * Report whether the credential reference currently resolves — WITHOUT
+   * exposing its value. Backed by `ctx.credentials.describe(ref)`. Used by
+   * `github_get_me` to answer auth-state questions without a network call;
+   * when absent or failing, callers fall back to asking the API itself.
+   */
+  describeToken?: () => Promise<{ configured: boolean }>
 }
 
 export interface GithubRequestInit {
@@ -104,6 +111,17 @@ export class GithubClient {
       if (value !== undefined) url.searchParams.set(key, String(value))
     }
     return url.toString()
+  }
+
+  /** Credential-configured probe for auth-state surfaces; never the value. */
+  async describeToken(): Promise<{ configured: boolean }> {
+    if (!this.options.describeToken) return { configured: true }
+    try {
+      return await this.options.describeToken()
+    } catch {
+      // Unknown — let the API call itself decide via its status code.
+      return { configured: true }
+    }
   }
 
   /**

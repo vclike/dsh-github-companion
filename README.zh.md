@@ -97,6 +97,33 @@ npm run build       # 产出 lib/
 node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于 profile 目录内运行
 ```
 
+## 测试
+
+四层，由便宜到贵：
+
+```bash
+# L1 — 离线：类型 + 24 个单测（client/tools/gate，mock fetch）
+npm run typecheck && npm test
+
+# L2 — 包能被 profile 的 link 布局加载
+dsh plugin --profile plugin-verify add <repo>   # 一次即可
+cd ~/.dsh/profiles/plugin-verify
+dsh --profile plugin-verify --dump-config        # 插入行存在？
+node D:/path/to/dsh-plugin-github/scripts/verify-load.mjs
+
+# L3 — 真连 GitHub API 冒烟（只读；匿名即可，60 次/小时）
+node scripts/smoke-live.mjs                      # 仓库根目录运行
+# 认证路径：先在环境里设置 GITHUB_TOKEN
+
+# L4 — 认证+写操作：用一个一次性仓库。
+# 打开 enableGitDataTools 后按 create_branch → push_files →
+# create_pull_request 顺序驱动（GUI 对话或 headless profile）。
+
+# L5 — agent 级端到端：`dsh plugin add` 进日常 profile 后，直接问
+# "查一下 bytedance/deer-flow 的 star 数" 并观察工具卡片；
+# gate mode=writes 时写工具应弹出审批。
+```
+
 ## 许可
 
 MIT

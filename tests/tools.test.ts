@@ -22,7 +22,7 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 /** Route-based fake GitHub server for tool-level tests. */
-function makeApi(routes: Record<string, unknown>) {
+function makeApi(routes: Record<string, unknown>, opts: { credentialConfigured?: boolean } = {}) {
   const calls: Array<{ url: string; init: RequestInit | undefined }> = []
   const fetchImpl = (url: string | URL | globalThis.Request, init?: RequestInit): Promise<Response> => {
     const path = new URL(String(url)).pathname
@@ -32,8 +32,13 @@ function makeApi(routes: Record<string, unknown>) {
     const value = routes[hit]!
     return Promise.resolve(jsonResponse(200, value))
   }
+  const configured = opts.credentialConfigured ?? true
   const client = new GithubClient(
-    { ...CONFIG, getToken: async () => 'tok' },
+    {
+      ...CONFIG,
+      getToken: async () => (configured ? 'tok' : undefined),
+      describeToken: async () => ({ configured }),
+    },
     fetchImpl as unknown as typeof fetch,
   )
   return { api: new GithubApi(client), calls }
@@ -72,6 +77,14 @@ describe('tool execute contracts', () => {
     const result = await toolByName(buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false }), 'github_get_me')
       .execute({}, EXEC)
     expect(result).toMatchObject({ ok: true, authenticated: true, login: 'octocat' })
+  })
+
+  it('github_get_me answers anonymous state WITHOUT a network call when unconfigured', async () => {
+    const { api, calls } = makeApi({}, { credentialConfigured: false })
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false })
+    const result = await toolByName(tools, 'github_get_me').execute({}, EXEC)
+    expect(result).toMatchObject({ ok: true, authenticated: false, login: null })
+    expect(calls).toHaveLength(0) // describe() probe only; /user never hit
   })
 
   it('github_get_repository projects repo metadata as JSON-safe values', async () => {

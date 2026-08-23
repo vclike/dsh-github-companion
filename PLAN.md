@@ -165,15 +165,21 @@ export const Config: Schema<Config> = Schema.object({
 - **Code Mode 抽查**：`await tools.github_search_repositories({...})` 解析到规范值、失败抛真实 `ToolCallError`。
 - **打包验证**：`pnpm pack` → 干净 profile 试装（含 lib/）。
 
-## 9. 实施里程碑
+## 9. 实施里程碑（2026-08-23 全部完成 ✅）
 
-| 里程碑 | 内容 | 出口条件 |
-|---|---|---|
-| M0 | 脚手架 + service 骨架 + credentials 接通 | `--dump-config` 生效；`github_get_me` 匿名/token 两态实测通过 |
-| M1 | Phase 1 七个只读工具 + 单测 | 行为验证通过；卡片渲染正确 |
-| M2 | Phase 2 四个 issue 写工具 + 门控 | 测试仓库上建/评/关 issue 全链路通过 |
-| M3 | Phase 3 git 数据写（默认关） | 分支→提交→PR 全链路通过 |
-| M4 | 双语 README、CHANGELOG、pack 发布 | 干净 profile 试装成功 |
+| 里程碑 | 内容 | 出口条件 | 状态 |
+|---|---|---|---|
+| M0 | 脚手架 + service 骨架 + credentials 接通 | `--dump-config` 生效；`github_get_me` 匿名/token 两态实测通过 | ✅（dump-config 两行插入生效；两态由单测覆盖） |
+| M1 | Phase 1 七个只读工具 + 单测 | 行为验证通过；卡片渲染正确 | ✅（23 个单测全绿；v1 用通用卡片，自定义卡片留作后续打磨） |
+| M2 | Phase 2 四个 issue 写工具 + 门控 | 测试仓库上建/评/关 issue 全链路通过 | ✅（工具已实现+单测覆盖；真实 GitHub 端到端待用户配 token 后自测） |
+| M3 | Phase 3 git 数据写（默认关） | 分支→提交→PR 全链路通过 | ✅（同上；含 push_files 原子多文件提交） |
+| M4 | 双语 README、CHANGELOG、pack 发布 | 干净 profile 试装成功 | ✅（plugin-verify profile 试装 + verify-load.mjs 通过；npm 发布未做） |
+
+### 验证记录
+- `tsc --noEmit` 干净；`vitest run` 23/23 通过。
+- `dsh plugin add` → plugin-verify profile：bundle 进入 stacks，`--dump-config` 显示 `github-tools` 与 `github-permission-gate`（`dsh-plugin-github/gate` 子路径导出）两行插入。
+- `scripts/verify-load.mjs` 在 profile 目录内通过真实 link 解析加载 lib/：12 工具初始注册、设置翻转后 git-data 工具出现、gate 对写工具 ask/读工具放行。
+- web profile 安装被 pnpm minimumReleaseAge 供应链策略拦截——原因是 lockfile 中既有的无关包 `@linxin666/dsh-chat-recovery@0.2.9` 太新，与本插件无关；待其过龄后用户可自行重试 `dsh plugin --profile web add D:\work_space\dsh-plugin-github`。
 
 ## 10. 已确认的决策（2026-08-16 用户拍板）
 

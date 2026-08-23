@@ -46,6 +46,15 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
         return undefined
       }
     },
+    describeToken: async () => {
+      try {
+        const info = await ctx.credentials.describe(ref)
+        return { configured: info.configured }
+      } catch (cause) {
+        ctx.logger.warn('credential describe failed; assuming configured', { cause })
+        return { configured: true }
+      }
+    },
   })
   const api = new GithubApi(client)
 

@@ -61,6 +61,11 @@ export class GithubApi {
 
   // ---------- discovery (Phase 1) ----------
 
+  /** Credential-configured probe; never exposes the value. */
+  describeAuth(): Promise<{ configured: boolean }> {
+    return this.client.describeToken()
+  }
+
   getAuthenticatedUser(signal?: AbortSignal): Promise<GithubResponse<unknown>> {
     return this.client.request('/user', { signal })
   }

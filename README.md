@@ -101,6 +101,33 @@ npm run build       # emit lib/
 node scripts/verify-load.mjs   # run inside a profile dir after `dsh plugin add`
 ```
 
+## Testing
+
+Four layers, cheapest first:
+
+```bash
+# L1 — offline: types + 24 unit tests (client/tools/gate, mocked fetch)
+npm run typecheck && npm test
+
+# L2 — package loads through a profile's link layout
+dsh plugin --profile plugin-verify add <repo>   # once
+cd ~/.dsh/profiles/plugin-verify
+dsh --profile plugin-verify --dump-config        # insert rows present?
+node D:/path/to/dsh-plugin-github/scripts/verify-load.mjs
+
+# L3 — live GitHub API smoke (READ-ONLY; anonymous works, 60 req/h)
+node scripts/smoke-live.mjs                      # from the repo root
+# authed path: set GITHUB_TOKEN in the environment first
+
+# L4 — authenticated writes: use a scratch repository.
+# Enable enableGitDataTools, then drive create_branch → push_files →
+# create_pull_request against it (GUI chat or headless profile).
+
+# L5 — agent-level E2E: after `dsh plugin add` into your daily profile,
+# ask the assistant e.g. "查一下 bytedance/deer-flow 的 star 数" and watch
+# the tool cards; gate mode=writes should pop an approval for write tools.
+```
+
 ## License
 
 MIT
