@@ -55,6 +55,22 @@ Both plugins register settings namespaces rendered by the DSH settings UI:
 Composition defaults come from the cordis.yml insert rows (`base` layer);
 changes apply live.
 
+The "GitHub" section on the settings page is contributed by this package's
+browser half (`client.js`, exposed as
+`/plugins/dsh-plugin-github/client.js` via the `dsh.client` manifest) and
+talks to the official `settings.describe/mutate` surface. Note that a backend
+`settings.register` alone produces no UI — every settings section is a client
+plugin contributing through the `settings.section` seat.
+
+UI-free equivalent: add user-layer sections to `~/.dsh/settings.yaml`:
+
+```yaml
+github-tools:
+  enableGitDataTools: true
+github-gate:
+  mode: all
+```
+
 ## Install
 
 ```bash
