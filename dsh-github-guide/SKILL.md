@@ -17,9 +17,9 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 
 | 层 | 工具 | 注册条件 | 备注 |
 |---|---|---|---|
-| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue / **list_releases** / **latest_release** / **list_starred** | 总是 | 无审批；list_starred 匿名不可用 |
+| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue / **list_releases** / **latest_release** / **list_starred** / **list_forks** / **list_watched** | 总是 | 匿名不可用：star/fork/watch 三张个人表 |
 | Issue 写 | create_issue / update_issue / add_issue_comment | 开关默认开 | 每次弹审批 |
-| Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request, **create_release** | 开关默认关 | 每次弹审批 |
+| Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request, **create_release**, **sync_fork** | 开关默认关 | 每次弹审批；sync_fork 仅快进合并，冲突报 merge_conflict |
 | 建仓 | create_repository | 开关默认关 | 强制私有 |
 
 工具没出现在会话里 = 对应开关没开。引导用户到 设置 → GitHub 区块打开，而不是硬猜。
@@ -97,6 +97,14 @@ watchlist 来源（按优先级）：用户点名的 `owner/repo` 列表；用�
    存在时会自动创建，一步完成打标+发版；返回的 html_url 汇报给用户
 4. 收到 `tag_already_exists` 时**不要覆盖**：问用户是换下一个版本号还是基于已有
    tag 补说明
+
+### G. Fork 上游巡检与同步
+
+1. `github_list_forks` —— 返回你的全部 fork，`upstream_newer: true` 的即"上游有更新"
+2. 向用户汇报陈旧清单（含上游仓库名），问哪些要同步
+3. 对确认的每个：`github_sync_fork { owner: <你>, repo, branch: 'main' }` —— 仅快进
+   合并；`merge_conflict` 时如实告知需手动处理，不要尝试强行覆盖
+4. 同步属于写操作，每个都会弹审批
 
 ## 5. 硬边界（不要尝试）
 

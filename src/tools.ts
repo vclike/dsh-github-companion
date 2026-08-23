@@ -132,6 +132,7 @@ export const GITHUB_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'github_push_files',
   'github_create_pull_request',
   'github_create_release',
+  'github_sync_fork',
 ])
 
 // ---------------------------------------------------------------------------
@@ -919,6 +920,115 @@ function listStarredTool(api: GithubApi, config: GithubToolsConfig): ToolDefinit
   })
 }
 
+function listForksTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_forks',
+    description:
+      "List the authenticated user's forked repositories with upstream freshness: parent repository and whether the upstream has been pushed to more recently than your fork (a lightweight hint, not an exact commit diff). Pair with github_sync_fork to bring a fork up to date.",
+    parameters: {
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listOwnedRepositories(num(args.per_page) ?? undefined, exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      const repos = Array.isArray(response.data) ? response.data : []
+      const forks = repos
+        .filter(r => (r as { fork?: boolean }).fork === true)
+        .map(raw => {
+          const r = raw as {
+            full_name?: string
+            html_url?: string
+            pushed_at?: string
+            parent?: { full_name?: string; pushed_at?: string; html_url?: string }
+          }
+          const mine = str(r.pushed_at) ?? ''
+          const upstream = str(r.parent?.pushed_at) ?? ''
+          return {
+            full_name: str(r.full_name),
+            html_url: str(r.html_url),
+            pushed_at: mine || null,
+            parent_full_name: str(r.parent?.full_name),
+            parent_html_url: str(r.parent?.html_url),
+            parent_pushed_at: upstream || null,
+            upstream_newer: Boolean(upstream && (!mine || upstream > mine)),
+          }
+        })
+      return {
+        ok: true,
+        count: forks.length,
+        stale_count: forks.filter(f => f.upstream_newer).length,
+        forks,
+      }
+    },
+  })
+}
+
+function listWatchedTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_watched',
+    description:
+      'List repositories the authenticated user watches (notification subscriptions). Note: watching is opt-in on GitHub — many users never watch anything; star lists are usually the better tracking source.',
+    parameters: {
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listWatched(num(args.per_page) ?? undefined, exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      const subs = Array.isArray(response.data) ? response.data : []
+      const items = subs.map(raw => {
+        const s = raw as { reason?: string; repository?: { full_name?: string; html_url?: string } }
+        return {
+          full_name: str(s.repository?.full_name),
+          html_url: str(s.repository?.html_url),
+          reason: str(s.reason),
+        }
+      })
+      return { ok: true, count: items.length, subscriptions: items }
+    },
+  })
+}
+
+function syncForkTool(api: GithubApi): ToolDefinition {
+  return defineTool({
+    name: 'github_sync_fork',
+    description:
+      "Sync a forked repository's branch with its upstream using GitHub's merge-upstream. Fast-forward merges only — conflicting changes require manual resolution (reported as merge_conflict).",
+    parameters: {
+      owner: { type: 'string', required: true, description: 'YOUR username (the fork owner)' },
+      repo: { type: 'string', required: true, description: 'The fork repository name' },
+      branch: { type: 'string', required: true, description: "Branch of YOUR fork to sync, e.g. 'main'" },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const branch = typeof args.branch === 'string' ? args.branch.trim() : ''
+      if (!branch) return { ok: false, status: 400, message: "branch is required (e.g. 'main')." }
+      const response = await api.syncFork(String(args.owner), String(args.repo), branch, exec.signal)
+      if (!response.ok && response.status !== 204) {
+        const data = response.data as { message?: string }
+        if (response.status === 409) {
+          return {
+            ok: false,
+            status: 409,
+            code: 'merge_conflict',
+            message: `Upstream changes to '${branch}' conflict with your fork — resolve manually on GitHub or locally.`,
+          }
+        }
+        return { ok: false, status: response.status, message: data.message ?? `sync failed (${response.status})` }
+      }
+      const data = (response.data ?? {}) as { message?: string; merge_type?: string }
+      const upToDate = response.status === 204 || /already/i.test(data.message ?? '')
+      return {
+        ok: true,
+        synced: !upToDate,
+        merge_type: data.merge_type ?? null,
+        message: upToDate ? `'${branch}' is already up to date with upstream.` : `Synced '${branch}' from upstream.`,
+      }
+    },
+  })
+}
+
 export function buildGithubTools(
   api: GithubApi,
   config: GithubToolsConfig,
@@ -937,6 +1047,8 @@ export function buildGithubTools(
     listReleasesTool(api, config),
     latestReleaseTool(api),
     listStarredTool(api, config),
+    listForksTool(api, config),
+    listWatchedTool(api, config),
   ]
   if (section.enableIssueWrites) {
     tools.push(createIssueTool(api), updateIssueTool(api), addIssueCommentTool(api))
@@ -953,6 +1065,7 @@ export function buildGithubTools(
       pushFilesTool(api),
       createPullRequestTool(api),
       createReleaseTool(api),
+      syncForkTool(api),
     )
   }
   return tools

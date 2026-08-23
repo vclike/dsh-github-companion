@@ -249,6 +249,31 @@ export class GithubApi {
     return this.client.request(`/user/starred${query}`, { signal })
   }
 
+  /** Repositories owned by the authenticated user (used to find forks). */
+  listOwnedRepositories(perPage?: number, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
+    const query = perPage ? `?type=owner&sort=pushed&per_page=${Math.min(Math.max(perPage, 1), 100)}` : '?type=owner&sort=pushed'
+    return this.client.request(`/user/repos${query}`, { signal })
+  }
+
+  /** Repositories the authenticated user watches (`/subscriptions`). */
+  listWatched(perPage?: number, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
+    const query = perPage ? `?per_page=${Math.min(Math.max(perPage, 1), 100)}` : ''
+    return this.client.request(`/subscriptions${query}`, { signal })
+  }
+
+  /**
+   * Sync a fork branch with its upstream via the official merge-upstream
+   * endpoint. 204 means already up to date; 409 means manual conflict
+   * resolution is required.
+   */
+  syncFork(owner: string, repo: string, branch: string, signal?: AbortSignal): Promise<GithubResponse<unknown>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/merge-upstream`, {
+      method: 'POST',
+      body: { branch },
+      signal,
+    })
+  }
+
   latestRelease(owner: string, repo: string, signal?: AbortSignal): Promise<GithubResponse<ReleaseItem>> {
     return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases/latest`, { signal })
   }

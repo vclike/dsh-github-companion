@@ -256,6 +256,87 @@ describe('tool execute contracts', () => {
     expect(result.repos[0]).toMatchObject({ full_name: 'vuejs/core', stars: 48000 })
   })
 
+  it('github_list_forks filters to forks and flags stale upstreams', async () => {
+    const { api } = makeApi({
+      '/user/repos': [
+        { full_name: 'me/original', fork: false },
+        {
+          full_name: 'me/some-lib',
+          fork: true,
+          pushed_at: '2026-08-01T00:00:00Z',
+          html_url: 'fork-url',
+          parent: { full_name: 'upstream/some-lib', pushed_at: '2026-08-20T00:00:00Z', html_url: 'up-url' },
+        },
+        {
+          full_name: 'me/fresh-fork',
+          fork: true,
+          pushed_at: '2026-08-22T00:00:00Z',
+          parent: { full_name: 'upstream/fresh', pushed_at: '2026-08-21T00:00:00Z' },
+        },
+      ],
+    })
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false })
+    expect(tools.map(t => t.name)).toContain('github_list_forks')
+
+    const result = (await toolByName(tools, 'github_list_forks').execute({}, EXEC)) as {
+      count: number
+      stale_count: number
+      forks: Array<Record<string, unknown>>
+    }
+    expect(result.count).toBe(2)
+    expect(result.stale_count).toBe(1)
+    const stale = result.forks.find(f => f.full_name === 'me/some-lib')
+    expect(stale).toMatchObject({
+      parent_full_name: 'upstream/some-lib',
+      upstream_newer: true,
+    })
+  })
+
+  it('github_list_watched shapes subscription entries', async () => {
+    const { api } = makeApi({
+      '/subscriptions': [
+        { reason: 'subscribed', repository: { full_name: 'a/b', html_url: 'w1' } },
+      ],
+    })
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false })
+    const result = (await toolByName(tools, 'github_list_watched').execute({}, EXEC)) as {
+      count: number
+      subscriptions: Array<Record<string, unknown>>
+    }
+    expect(result.count).toBe(1)
+    expect(result.subscriptions[0]).toMatchObject({ full_name: 'a/b', reason: 'subscribed' })
+  })
+
+  it('github_sync_fork reports up-to-date, success and conflict distinctly', async () => {
+    const mk = (status: number, body: unknown) =>
+      buildGithubTools(
+        new GithubApi(
+          new GithubClient(
+            { ...CONFIG, getToken: async () => 't' },
+            ((url, init) => {
+              void url
+              expect(JSON.parse(String(init?.body))).toEqual({ branch: 'main' })
+              // 204 responses must carry a null body per fetch spec
+              return Promise.resolve(
+                status === 204 ? new Response(null, { status }) : jsonResponse(status, body),
+              )
+            }) as unknown as typeof fetch,
+          ),
+        ),
+        CONFIG,
+        { enableIssueWrites: false, enableGitDataTools: true },
+      )
+
+    const clean = (await toolByName(mk(204, null), 'github_sync_fork').execute({ owner: 'me', repo: 'f', branch: 'main' }, EXEC)) as Record<string, unknown>
+    expect(clean).toMatchObject({ ok: true, synced: false })
+
+    const merged = (await toolByName(mk(200, { message: 'merged', merge_type: 'fast-forward' }), 'github_sync_fork').execute({ owner: 'me', repo: 'f', branch: 'main' }, EXEC)) as Record<string, unknown>
+    expect(merged).toMatchObject({ ok: true, synced: true, merge_type: 'fast-forward' })
+
+    const conflict = (await toolByName(mk(409, { message: 'Merge Conflict' }), 'github_sync_fork').execute({ owner: 'me', repo: 'f', branch: 'main' }, EXEC)) as Record<string, unknown>
+    expect(conflict).toMatchObject({ ok: false, status: 409, code: 'merge_conflict' })
+  })
+
   it('github_create_release posts the tag and projects the release url', async () => {
     let posted: Record<string, unknown> | undefined
     const fetchImpl = (url: string | URL, init?: RequestInit): Promise<Response> => {

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 (2026-08-23)
+
+Fork / watch tracking + one-command fork sync.
+
+- New read tools (always on): `github_list_forks` (your forks with upstream
+  freshness hint — parent repo, pushed_at comparison, `upstream_newer` flag)
+  and `github_list_watched` (notification subscriptions).
+- New write tool: `github_sync_fork` — official merge-upstream endpoint;
+  fast-forward only, structured `merge_conflict` code on 409, friendly
+  already-up-to-date result on 204. Sits under the Git-data switch and the
+  permission gate.
+- Usage skill: recipe G (fork upstream patrol & sync); digest recipe can now
+  draw its watchlist from starred repos.
+
 ## 0.2.1 (2026-08-23)
 
 - New read tool: `github_list_starred` — repositories the authenticated user
