@@ -35,6 +35,7 @@ window.__ModuleLoader__.load({
 				'.dsh-gh-row.stack{flex-direction:column;align-items:stretch;gap:8px}',
 				'.dsh-gh-labels{display:flex;flex-direction:column;min-width:0}',
 				'.dsh-gh-hint{font-size:11px;opacity:.62;line-height:1.45;margin-top:1px}',
+				'.dsh-gh-hint a{color:#4c8dff;text-decoration:none}.dsh-gh-hint a:hover{text-decoration:underline}',
 				'.dsh-gh-select,.dsh-gh-input{font:inherit;font-size:13px;color:var(--dsw-alias-label-primary,inherit);',
 				'background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent));',
 				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
@@ -121,13 +122,13 @@ window.__ModuleLoader__.load({
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, 'GitHub Token（PAT）',
 							h('span', { className: 'dsh-gh-badge' }, configured ? '已设置' : '未设置')),
-						h('span', { className: 'dsh-gh-hint' },
-							'保存后立即生效，优先于 GITHUB_TOKEN 环境变量；令牌只写入服务端配置文件，界面不回显。'),
-					),
+							h('span', { className: 'dsh-gh-hint' },
+								'保存后立即生效，优先于 GITHUB_TOKEN 环境变量；令牌只写入服务端配置文件，界面不回显。'),
+						),
 					h('div', { className: 'dsh-gh-row', style: { padding: 0, gap: 8 } },
 						h('input', {
 							className: 'dsh-gh-input', type: 'password', spellCheck: false,
-							placeholder: configured ? '••••••••（输入新值可覆盖）' : '粘贴 PAT（github.com/settings/personal-access-tokens）',
+							placeholder: configured ? '••••••••（输入新值可覆盖）' : '粘贴 PAT（生成后粘贴到这里）',
 							value: draft, disabled: busy,
 							onChange: e => setDraft(e.target.value),
 						}),
@@ -139,8 +140,17 @@ window.__ModuleLoader__.load({
 							className: 'dsh-gh-btn', disabled: busy,
 							onClick: () => onWrite({ op: 'unset', path: ['token'] }),
 						}, '清除') : null,
-					))
+					),
+					h('span', { className: 'dsh-gh-hint' },
+						'新手一键创建（推荐，权限已预选）：',
+						h('a', { href: 'https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github', target: '_blank', rel: 'noreferrer' }, '点此生成经典令牌'),
+						'——打开即勾好 repo+workflow，拉到底点 Generate token，复制结果粘贴到上面。需逐仓精细控制时用',
+						h('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noreferrer' }, '细粒度令牌（手动配权限）'),
+						'。',
+					),
+				)
 			}
+
 
 			function ExcludeToolsRow({ gate, busy, onWrite }) {
 				const current = Array.isArray(gate.value && gate.value.excludeTools)
