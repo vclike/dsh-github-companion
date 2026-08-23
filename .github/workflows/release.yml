@@ -2,6 +2,9 @@
 # npm publishing is OPTIONAL: it runs only when an NPM_TOKEN secret exists
 # (registry token with publish rights). Until then the job is skipped and the
 # GitHub Release alone marks the version.
+#
+# NOTE: `secrets` is NOT available in step-level `if:` expressions — the
+# presence check goes through a job-level env var instead.
 name: Release
 
 on:
@@ -14,10 +17,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -37,10 +42,9 @@ jobs:
           generate_release_notes: true
 
       - name: Publish to npm (only when NPM_TOKEN is configured)
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: env.HAS_NPM_TOKEN == 'true'
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
           npm publish
