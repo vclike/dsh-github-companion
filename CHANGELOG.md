@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.9 (2026-08-23)
+
+The gate now understands the session's trust posture.
+
+- Under the bundled **Full access** preset (sandbox danger-full-access AND
+  approval policy never) there is no prompt channel — every gated ask used
+  to fail downstream misreported as "the user rejected tool". The gate now
+  recognizes that exact two-knob posture and auto-allows its asks: full
+  access finally means the plugin writes flow, matching what the preset
+  promises.
+- Any other knob combination (default ask, explicit deny, or custom pairs
+  like read-local-files + no-prompting) keeps the previous behavior — mixed
+  postures do not express blanket trust for remote writes.
+- Usage skill documents both this and the "auto-rejected without a prompt"
+  playbook (exempt the tool; do not detour through bash git).
+
 ## 0.4.8 (2026-08-23)
 
 From a full read-path smoke test of every tool against the live API.

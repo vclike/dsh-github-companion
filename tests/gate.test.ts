@@ -7,10 +7,14 @@ import type { GithubGateSection } from '../src/config.ts'
 import { apply as applyGate } from '../src/gate.ts'
 
 /** Minimal Cordis capture harness: records the tools/pre-execute listener. */
-function makeCtx(section: GithubGateSection) {
+function makeCtx(
+  section: GithubGateSection,
+  env: { sandboxMode?: string; approvalPolicy?: string } = {},
+) {
   let listener:
     | ((exec: unknown, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>)
     | undefined
+  const watchers: Array<(next: GithubGateSection) => void> = []
   const ctx = {
     on(event: string, handler: unknown) {
       if (event === 'tools/pre-execute') listener = handler as typeof listener
@@ -31,7 +35,12 @@ function makeCtx(section: GithubGateSection) {
     },
     logger: { info() {}, warn() {}, error() {} },
   }
-  const watchers: Array<(next: GithubGateSection) => void> = []
+  if (env.sandboxMode !== undefined) {
+    ;(ctx as { shell?: unknown }).shell = { sandboxMode: env.sandboxMode }
+  }
+  if (env.approvalPolicy !== undefined) {
+    ;(ctx as { approval?: unknown }).approval = { config: { policy: env.approvalPolicy } }
+  }
   applyGate(ctx as unknown as Context, section)
   return {
     ctx,
@@ -110,5 +119,45 @@ describe('github-permission-gate', () => {
     gate.setSection({ mode: 'writes', action: 'deny', excludeTools: [] })
     const decision = await decide(gate, 'github_update_issue')
     expect(decision).toMatchObject({ kind: 'deny' })
+  })
+
+  describe('Full access posture (danger-full-access + approval=never)', () => {
+    it('auto-allows gated writes — no prompt channel exists to fail into', async () => {
+      const gate = makeCtx(
+        { mode: 'writes', action: 'ask', excludeTools: [] },
+        { sandboxMode: 'danger-full-access', approvalPolicy: 'never' },
+      )
+      expect(await decide(gate, 'github_push_files')).toEqual({ kind: 'allow' })
+      expect(await decide(gate, 'github_create_issue')).toEqual({ kind: 'allow' })
+    })
+
+    it('still honors explicit action=deny over the posture', async () => {
+      const gate = makeCtx(
+        { mode: 'writes', action: 'deny', excludeTools: [] },
+        { sandboxMode: 'danger-full-access', approvalPolicy: 'never' },
+      )
+      expect(await decide(gate, 'github_push_files')).toMatchObject({ kind: 'deny' })
+    })
+
+    it('mixed knobs (read-only local + never) keep asking — they are not Full access', async () => {
+      const gate = makeCtx(
+        { mode: 'writes', action: 'ask', excludeTools: [] },
+        { sandboxMode: 'read-only', approvalPolicy: 'never' },
+      )
+      expect(await decide(gate, 'github_push_files')).toMatchObject({ kind: 'ask' })
+    })
+
+    it('default posture (workspace-write + ask) keeps asking', async () => {
+      const gate = makeCtx(
+        { mode: 'writes', action: 'ask', excludeTools: [] },
+        { sandboxMode: 'workspace-write', approvalPolicy: 'ask' },
+      )
+      expect(await decide(gate, 'github_push_files')).toMatchObject({ kind: 'ask' })
+    })
+
+    it('missing services fall back to asking (older hosts)', async () => {
+      const gate = makeCtx({ mode: 'writes', action: 'ask', excludeTools: [] })
+      expect(await decide(gate, 'github_push_files')).toMatchObject({ kind: 'ask' })
+    })
   })
 })

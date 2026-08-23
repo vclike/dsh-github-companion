@@ -26,9 +26,23 @@ import { GithubGateSectionSchema, type GithubGateSection } from './config.ts'
 import { GITHUB_WRITE_TOOLS } from './tools.ts'
 
 export const name = 'github-permission-gate'
-export const inject = ['tools', 'settings'] as const
+export const inject = ['tools', 'settings', 'shell', 'approval'] as const
 
 export const Config: typeof GithubGateSectionSchema = GithubGateSectionSchema
+
+/**
+ * True only for the exact bundled "Full access" posture: sandbox
+ * danger-full-access AND approval policy never. That combination has no
+ * prompt channel at all — every ask would deterministically fail downstream
+ * misreported as "the user rejected tool". Both knobs must agree because
+ * they are independent: e.g. a custom read-local-files + no-prompt setup
+ * does NOT express the same blanket trust for remote writes.
+ */
+function fullAccessPosture(ctx: Context): boolean {
+  const shell = (ctx as unknown as { shell?: { sandboxMode?: string } }).shell
+  const approval = (ctx as unknown as { approval?: { config?: { policy?: string } } }).approval
+  return shell?.sandboxMode === 'danger-full-access' && approval?.config?.policy === 'never'
+}
 
 export function apply(ctx: Context, config: GithubGateSection) {
   const sectionScope = ctx.settings.register(settingsNamespace('github-gate'), GithubGateSectionSchema, {
@@ -55,6 +69,13 @@ export function apply(ctx: Context, config: GithubGateSection) {
 
     if (current.action === 'deny') {
       return { kind: 'deny', reason: `GitHub tool '${exec.name}' denied by github-permission-gate (mode=${current.mode}).` }
+    }
+    if (fullAccessPosture(ctx)) {
+      ctx.logger?.info?.(
+        'github-permission-gate: Full access posture → auto-allowing %s without prompting',
+        exec.name,
+      )
+      return next()
     }
     return { kind: 'ask', reason: `github-permission-gate requests approval for '${exec.name}' (mode=${current.mode}).` }
   })
