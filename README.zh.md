@@ -124,6 +124,35 @@ node scripts/smoke-live.mjs                      # 仓库根目录运行
 # gate mode=writes 时写工具应弹出审批。
 ```
 
+## 启动安全与恢复（实测结论）
+
+插件出问题时会发生什么，全部在真实 harness 启动上验证过：
+
+| 场景 | 结果 |
+|---|---|
+| 配置行健康 | 正常启动；headless 一次性任务里模型真实调用了 `github_get_repository` |
+| schema 非法配置（如数字字段给字符串） | **整个 profile 拒绝启动**，exit 1，错误精确指到行 id 和字段——官方 fail-closed 设计 |
+| 配置合法但 `apply()` 抛错（如 `credentialRef` 格式错） | 同样拒绝启动，堆栈点名插件 |
+| 工具 `execute()` 运行时抛错 | 被工具注册表包含为 `isError` 结果，harness 继续运行 |
+
+所以坏安装的爆炸半径是"这个 profile 在修好/删掉该行之前起不来"——绝不会静默
+变成半坏的 agent。恢复手段：
+
+```bash
+# 方式 1：干净移除
+dsh plugin --profile <name> remove dsh-plugin-github
+
+# 方式 2：手改 profile 的 cordis.patch.yml（删掉或修正那两行）
+
+# 重启日常 profile 前的预检：
+dsh --profile <name> --dump-config          # 组合检查
+dsh --profile <name> "<一次性任务>"          # 真实启动检查（支持 headless 的 profile）
+```
+
+测量用的两个故障注入 overlay 在 `scripts/bad-config.patch.yml` 与
+`scripts/apply-throw.patch.yml`，可对任意 scratch profile 重放：
+`dsh --profile <scratch> --patch <overlay> "<任务>"`。
+
 ## 许可
 
 MIT

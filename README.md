@@ -128,6 +128,36 @@ node scripts/smoke-live.mjs                      # from the repo root
 # the tool cards; gate mode=writes should pop an approval for write tools.
 ```
 
+## Boot-safety & recovery (verified by experiment)
+
+What happens when things go wrong, measured on a real harness boot:
+
+| Scenario | Result |
+|---|---|
+| Healthy rows (`scripts/` none) | boots; model called `github_get_repository` live via a headless one-shot task |
+| Schema-invalid config (e.g. string where number expected) | **entire profile refuses to boot**, exit 1, error names the exact row id and field — fail-closed by design |
+| Valid config but `apply()` throws (e.g. malformed `credentialRef`) | same: boot refuses, stack trace names the plugin |
+| Tool `execute()` throwing at runtime | contained by the tool registry as an `isError` result; harness keeps running |
+
+So the blast radius of a bad install is "this profile won't start until the row
+is fixed or removed" — never a silent half-broken agent. Recovery:
+
+```bash
+# option 1: remove cleanly
+dsh plugin --profile <name> remove dsh-plugin-github
+
+# option 2: hand-edit the profile's cordis.patch.yml (delete/fix the two rows)
+
+# pre-flight before restarting your daily profile:
+dsh --profile <name> --dump-config          # composition check
+dsh --profile <name> "<one-shot task>"      # real boot check (headless-capable profiles)
+```
+
+The two injection overlays used to measure this live in
+`scripts/bad-config.patch.yml` and `scripts/apply-throw.patch.yml` — replay
+them against any scratch profile with
+`dsh --profile <scratch> --patch <overlay> "<task>"`.
+
 ## License
 
 MIT

@@ -1,0 +1,13 @@
+# Failure-injection #2: schema-VALID config that makes apply() itself throw
+# (credentialRef must be a POSIX shell identifier; the space trips the brand
+# validation inside the plugin body, after config resolution).
+- id: github-tools
+  config:
+    credentialRef: "GITHUB TOKEN BAD"
+    apiBaseUrl: https://api.github.com
+    requestTimeoutMs: 30000
+    maxRetries: 1
+    maxPerPage: 30
+    maxFileBytes: 262144
+    enableIssueWrites: true
+    enableGitDataTools: false

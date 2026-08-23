@@ -1,0 +1,13 @@
+# Failure-injection overlay: override the github-tools row with a schema-invalid
+# config (requestTimeoutMs must be a number). Composed AFTER the bundle layer,
+# so this replaces that row's whole config at compose time.
+- id: github-tools
+  config:
+    credentialRef: GITHUB_TOKEN
+    apiBaseUrl: https://api.github.com
+    requestTimeoutMs: "not-a-number"
+    maxRetries: 1
+    maxPerPage: 30
+    maxFileBytes: 262144
+    enableIssueWrites: true
+    enableGitDataTools: false
