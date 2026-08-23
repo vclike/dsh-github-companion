@@ -38,11 +38,18 @@ export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object(
 export interface GithubToolsSection {
   enableIssueWrites: boolean
   enableGitDataTools: boolean
+  /**
+   * Inline PAT (write-only in the UI). Empty/absent falls back to the
+   * credential reference. Declared WITHOUT a default so the redaction
+   * sidecar reports `set: false` until the user actually saves one.
+   */
+  token?: string
 }
 
 export const GithubToolsSectionSchema: Schema<GithubToolsSection> = Schema.object({
   enableIssueWrites: Schema.boolean().default(true).description('Allow issue/comment write tools'),
   enableGitDataTools: Schema.boolean().default(false).description('Allow branch/commit/PR write tools'),
+  token: Schema.string().role('secret').description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),
 })
 
 /** Composition-layer configuration for the permission-gate plugin. */

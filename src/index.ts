@@ -33,12 +33,26 @@ export const Config: typeof GithubToolsConfigSchema = GithubToolsConfigSchema
 export function apply(ctx: Context, config: GithubToolsConfig) {
   const ref = credentialRef(config.credentialRef)
 
+  const sectionScope = ctx.settings.register(settingsNamespace('github-tools'), GithubToolsSectionSchema, {
+    base: { enableIssueWrites: config.enableIssueWrites, enableGitDataTools: config.enableGitDataTools },
+    applies: 'live',
+  })
+
+  // Token precedence: an inline PAT saved in the settings UI (user layer)
+  // wins over the credential seam; empty/absent falls back to the env
+  // reference. Both paths resolve per operation — never cached.
+  const sectionToken = (): string => {
+    const section = sectionScope.get() as { token?: string }
+    return typeof section.token === 'string' ? section.token.trim() : ''
+  }
+
   const client = new GithubClient({
     apiBaseUrl: config.apiBaseUrl,
     requestTimeoutMs: config.requestTimeoutMs,
     maxRetries: config.maxRetries,
-    // Per-operation resolution: never cache across requests.
     getToken: async () => {
+      const inline = sectionToken()
+      if (inline) return inline
       try {
         return (await ctx.credentials.resolve(ref))?.value
       } catch (cause) {
@@ -47,6 +61,7 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
       }
     },
     describeToken: async () => {
+      if (sectionToken()) return { configured: true }
       try {
         const info = await ctx.credentials.describe(ref)
         return { configured: info.configured }
@@ -57,11 +72,6 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
     },
   })
   const api = new GithubApi(client)
-
-  const sectionScope = ctx.settings.register(settingsNamespace('github-tools'), GithubToolsSectionSchema, {
-    base: { enableIssueWrites: config.enableIssueWrites, enableGitDataTools: config.enableGitDataTools },
-    applies: 'live',
-  })
 
   ctx.effect(() => {
     let disposeTools: (() => void) | undefined

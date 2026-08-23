@@ -7,8 +7,8 @@
  *
  * Hand-written against the shared client externals (`react` via the module
  * loader's require) — same shape as dsh-status-rotator's browser half, so no
- * bundler step is needed. Everything degrades silently on hosts that lack the
- * seats this card rides on.
+ * bundler step is needed. Everything degrades audibly (console.warn) but
+ * never breaks the host.
  */
 window.__ModuleLoader__.load({
 	id: 'dsh-plugin-github',
@@ -18,6 +18,47 @@ window.__ModuleLoader__.load({
 
 		const NS_TOOLS = 'github-tools'
 		const NS_GATE = 'github-gate'
+
+		/** Inject the card stylesheet exactly once. */
+		function ensureStyles() {
+			if (document.getElementById('dsh-gh-settings-style')) return
+			const style = document.createElement('style')
+			style.id = 'dsh-gh-settings-style'
+			style.textContent = [
+				'.dsh-gh{display:flex;flex-direction:column;gap:14px;width:100%;max-width:560px;',
+				'color:var(--dsw-alias-label-primary,inherit);line-height:1.5;font-size:13px}',
+				'.dsh-gh-group{display:flex;flex-direction:column;gap:4px;padding:12px 14px;',
+				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.35));border-radius:10px;',
+				'background:var(--dsw-alias-bg-layer-1,transparent)}',
+				'.dsh-gh-title{margin:0 0 6px;font-size:14px;font-weight:600;line-height:1.4}',
+				'.dsh-gh-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;min-height:34px}',
+				'.dsh-gh-row.stack{flex-direction:column;align-items:stretch;gap:8px}',
+				'.dsh-gh-labels{display:flex;flex-direction:column;min-width:0}',
+				'.dsh-gh-hint{font-size:11px;opacity:.62;line-height:1.45;margin-top:1px}',
+				'.dsh-gh-select,.dsh-gh-input{font:inherit;font-size:13px;color:var(--dsw-alias-label-primary,inherit);',
+				'background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent));',
+				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
+				'border-radius:8px;padding:5px 9px;min-width:0}',
+				'.dsh-gh-select{cursor:pointer}',
+				// Native dropdown lists ignore inherited transparency in dark mode;
+				// give <option> explicit light-surface colors so text stays readable.
+				'.dsh-gh-select option{color:#1f2328;background:#ffffff}',
+				'.dsh-gh-input:focus,.dsh-gh-select:focus{outline:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.6))}',
+				'.dsh-gh-check{width:17px;height:17px;cursor:pointer;accent-color:var(--dsw-alias-label-primary,#111)}',
+				'.dsh-gh-btn{cursor:pointer;font:inherit;font-size:12px;border-radius:999px;padding:4px 14px;',
+				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));',
+				'background:var(--dsw-alias-bg-layer-2,var(--dsw-alias-bg-layer-1,transparent));',
+				'color:var(--dsw-alias-label-primary,inherit)}',
+				'.dsh-gh-btn.primary{background:var(--dsw-alias-label-primary,#111);',
+				'color:var(--dsw-alias-label-primary-foreground,#fff)}',
+				'.dsh-gh-btn:disabled{opacity:.5;cursor:default}',
+				'.dsh-gh-muted{font-size:11px;opacity:.62;line-height:1.5}',
+				'.dsh-gh-error{font-size:12px;line-height:1.5;color:#e5534b}',
+				'.dsh-gh-badge{display:inline-block;font-size:10px;border-radius:999px;padding:1px 8px;margin-left:8px;vertical-align:middle;',
+				'border:1px solid var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.45));opacity:.75}',
+			].join('')
+			document.head.appendChild(style)
+		}
 
 		/** Fetch the describe mirror and pick out our two namespaces. */
 		async function describeOurs(api) {
@@ -31,10 +72,10 @@ window.__ModuleLoader__.load({
 		}
 
 		/** One path-op write against a namespace's user layer. */
-		async function setField(api, ns, descriptor, field, value) {
+		async function writeOp(api, ns, descriptor, op) {
 			const res = await api.settings.mutate({
 				ns,
-				ops: [{ op: 'set', path: [field], value }],
+				ops: [op],
 				expectedRevision: descriptor.revision,
 			})
 			const inner = res && res.result ? res.result : null
@@ -42,85 +83,93 @@ window.__ModuleLoader__.load({
 				throw new Error(inner && inner.message ? inner.message : 'settings write failed')
 		}
 
+		/** True when the redaction sidecar reports a value at `field`. */
+		function secretSet(descriptor, field) {
+			const secrets = (descriptor && descriptor.secrets) || []
+			return secrets.some(s => Array.isArray(s.path) && s.path.join('.') === field && s.set === true)
+		}
+
 		function makePanel(getConnection) {
 			const h = react.createElement
 			const { useState, useEffect } = react
 
-			const rowStyle = {
-				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-				gap: 12, padding: '6px 0',
-			}
-			const groupStyle = {
-				display: 'flex', flexDirection: 'column', gap: 2, width: '100%',
-				maxWidth: 560, padding: '10px 12px', marginBottom: 12,
-				border: '1px solid var(--dsw-alias-label-primary-dimmed, rgba(127,127,127,.35))',
-				borderRadius: 10,
-			}
-			const titleStyle = { margin: '0 0 4px', fontSize: 14, fontWeight: 600 }
-			const mutedStyle = {
-				fontSize: 12, opacity: 0.65, margin: '2px 0 8px',
-			}
-			const selectStyle = {
-				font: 'inherit', padding: '4px 8px', borderRadius: 8,
-				border: '1px solid var(--dsw-alias-label-primary-dimmed, rgba(127,127,127,.45))',
-				background: 'transparent', color: 'inherit',
-			}
-			const inputStyle = {
-				...selectStyle, flex: 1, minWidth: 0,
-			}
-			const saveStyle = {
-				cursor: 'pointer', font: 'inherit', borderRadius: 999, padding: '3px 12px',
-				border: '1px solid var(--dsw-alias-label-primary-dimmed, rgba(127,127,127,.45))',
-				background: 'var(--dsw-alias-label-primary,#111)',
-				color: 'var(--dsw-alias-label-primary-foreground,#fff)',
-			}
-
 			function ToggleRow({ label, hint, checked, disabled, onChange }) {
-				return h('label', { style: rowStyle },
-					h('span', { style: { display: 'flex', flexDirection: 'column' } },
+				return h('div', { className: 'dsh-gh-row' },
+					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, label),
-						hint ? h('span', { style: { fontSize: 11, opacity: 0.6 } }, hint) : null),
+						hint ? h('span', { className: 'dsh-gh-hint' }, hint) : null),
 					h('input', {
-						type: 'checkbox', checked: !!checked, disabled: !!disabled,
-						onChange: e => onChange(e.target.checked),
-						style: { width: 18, height: 18, cursor: 'pointer' },
+						type: 'checkbox', className: 'dsh-gh-check', checked: !!checked,
+						disabled: !!disabled, onChange: e => onChange(e.target.checked),
 					}))
 			}
 
 			function SelectRow({ label, value, options, disabled, onChange }) {
-				return h('label', { style: rowStyle },
-					h('span', null, label),
+				return h('div', { className: 'dsh-gh-row' },
+					h('div', { className: 'dsh-gh-labels' },
+						h('span', null, label)),
 					h('select', {
-						value, disabled: !!disabled, onChange: e => onChange(e.target.value),
-						style: selectStyle,
+						className: 'dsh-gh-select', value, disabled: !!disabled,
+						onChange: e => onChange(e.target.value),
 					}, options.map(o => h('option', { key: o.value, value: o.value }, o.label))))
 			}
 
-			function ExcludeToolsRow({ gate, onSave, busy }) {
-				const [draft, setDraft] = useState(null)
+			function TokenRow({ tools, busy, onWrite }) {
+				const [draft, setDraft] = useState('')
+				const configured = secretSet(tools, 'token')
+				return h('div', { className: 'dsh-gh-row stack' },
+					h('div', { className: 'dsh-gh-labels' },
+						h('span', null, 'GitHub Token（PAT）',
+							h('span', { className: 'dsh-gh-badge' }, configured ? '已设置' : '未设置')),
+						h('span', { className: 'dsh-gh-hint' },
+							'保存后立即生效，优先于 GITHUB_TOKEN 环境变量；令牌只写入服务端配置文件，界面不回显。'),
+					),
+					h('div', { className: 'dsh-gh-row', style: { padding: 0, gap: 8 } },
+						h('input', {
+							className: 'dsh-gh-input', type: 'password', spellCheck: false,
+							placeholder: configured ? '••••••••（输入新值可覆盖）' : '粘贴 PAT（github.com/settings/personal-access-tokens）',
+							value: draft, disabled: busy,
+							onChange: e => setDraft(e.target.value),
+						}),
+						h('button', {
+							className: 'dsh-gh-btn primary', disabled: busy || !draft.trim(),
+							onClick: () => onWrite({ op: 'set', path: ['token'], value: draft.trim() }, () => setDraft('')),
+						}, '保存'),
+						configured ? h('button', {
+							className: 'dsh-gh-btn', disabled: busy,
+							onClick: () => onWrite({ op: 'unset', path: ['token'] }),
+						}, '清除') : null,
+					))
+			}
+
+			function ExcludeToolsRow({ gate, busy, onWrite }) {
 				const current = Array.isArray(gate.value && gate.value.excludeTools)
 					? gate.value.excludeTools.join(', ') : ''
+				const [draft, setDraft] = useState(null)
 				const text = draft === null ? current : draft
-				return h('div', { style: { ...rowStyle, alignItems: 'flex-end' } },
-					h('span', { style: { display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 } },
-						h('span', null, '豁免工具（逗号分隔，精确名）'),
+				return h('div', { className: 'dsh-gh-row stack' },
+					h('div', { className: 'dsh-gh-labels' },
+						h('span', null, '豁免工具（精确名，逗号分隔）'),
+						h('span', { className: 'dsh-gh-hint' }, '例如：github_search_issues, github_get_me'),
+					),
+					h('div', { className: 'dsh-gh-row', style: { padding: 0, gap: 8 } },
 						h('input', {
-							value: text, spellCheck: false, disabled: busy,
-							placeholder: '例如：github_search_issues',
+							className: 'dsh-gh-input', spellCheck: false, value: text, disabled: busy,
 							onChange: e => setDraft(e.target.value),
-							style: inputStyle,
-						})),
-					h('button', {
-						style: saveStyle, disabled: busy || draft === null,
-						onClick: () => {
-							const list = text.split(',').map(s => s.trim()).filter(Boolean)
-							onSave(list, () => setDraft(null))
-						},
-					}, '保存'))
+						}),
+						h('button', {
+							className: 'dsh-gh-btn primary', disabled: busy || draft === null,
+							onClick: () => {
+								const list = text.split(',').map(s => s.trim()).filter(Boolean)
+								onWrite({ op: 'set', path: ['excludeTools'], value: list }, () => setDraft(null))
+							},
+						}, '保存'))
+					)
 			}
 
 			function Group({ title, children }) {
-				return h('div', { style: groupStyle }, h('h3', { style: titleStyle }, title), children)
+				return h('div', { className: 'dsh-gh-group' },
+					h('h3', { className: 'dsh-gh-title' }, title), children)
 			}
 
 			function GithubSettingsPanel() {
@@ -141,13 +190,13 @@ window.__ModuleLoader__.load({
 
 				useEffect(() => { void reload() }, [])
 
-				const write = async (ns, descriptor, field, value, after) => {
+				const write = async (ns, descriptor, op, after) => {
 					if (!descriptor) return
 					setBusy(true)
 					setWriteError('')
 					try {
 						const conn = getConnection()
-						await setField(conn.api, ns, descriptor, field, value)
+						await writeOp(conn.api, ns, descriptor, op)
 						if (after) after()
 						await reload()
 					} catch (error) {
@@ -159,58 +208,64 @@ window.__ModuleLoader__.load({
 				}
 
 				if (state.loading)
-					return h('div', { style: mutedStyle }, '正在读取 GitHub 设置…')
+					return h('div', { className: 'dsh-gh-muted' }, '正在读取 GitHub 设置…')
 				if (state.error)
-					return h('div', { style: { ...mutedStyle, color: '#c0392b' } },
-						'无法读取设置界面数据：' + state.error)
+					return h('div', { className: 'dsh-gh-error' }, '无法读取设置数据：' + state.error)
 
 				const t = state.tools
 				const g = state.gate
 				const anyPresent = !!(t || g)
+				if (!anyPresent)
+					return h('div', { className: 'dsh-gh-muted' },
+						'未发现 github-tools / github-gate 命名空间——插件可能未启用。')
 
-				return h('div', { style: { width: '100%' } },
-					!anyPresent ? h('div', { style: mutedStyle },
-						'未发现 github-tools / github-gate 命名空间——插件可能未启用。') : null,
+				const tokenSource = t && secretSet(t, 'token')
+					? '设置中保存的 PAT'
+					: '环境变量 GITHUB_TOKEN'
+				return h('div', { className: 'dsh-gh' },
 
 					t ? h(Group, { title: 'GitHub 工具' },
+						h(TokenRow, {
+							tools: t, busy,
+							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
+						}),
 						h(ToggleRow, {
-							label: 'Issue 写操作', hint: 'create/update/comment 三类写工具的注册开关',
+							label: 'Issue 写操作', hint: 'create / update / comment 三类写工具的注册开关',
 							checked: !!(t.value && t.value.enableIssueWrites),
-							onChange: v => write(NS_TOOLS, t, 'enableIssueWrites', v),
+							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableIssueWrites'], value: v }),
 						}),
 						h(ToggleRow, {
-							label: 'Git 数据写操作', hint: '分支/提交文件/PR 等六个工具（含两个只读 PR 工具）',
+							label: 'Git 数据写操作', hint: '分支 / 提交文件 / PR 等（含两个 PR 只读工具）',
 							checked: !!(t.value && t.value.enableGitDataTools),
-							onChange: v => write(NS_TOOLS, t, 'enableGitDataTools', v),
+							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableGitDataTools'], value: v }),
 						}),
-						h('div', { style: mutedStyle }, '改动实时生效。'),
+						h('div', { className: 'dsh-gh-muted' },
+							'当前凭证来源：' + tokenSource + '。改动实时生效。'),
 					) : null,
 
 					g ? h(Group, { title: 'GitHub 权限门' },
 						h(SelectRow, {
-							label: '门控范围',
-							value: (g.value && g.value.mode) || 'writes',
+							label: '门控范围', value: (g.value && g.value.mode) || 'writes',
 							options: [
 								{ value: 'off', label: 'off — 不拦截' },
 								{ value: 'writes', label: 'writes — 拦截写工具' },
 								{ value: 'all', label: 'all — 拦截所有 github_* 工具' },
 							],
-							onChange: v => write(NS_GATE, g, 'mode', v),
+							onChange: v => write(NS_GATE, g, { op: 'set', path: ['mode'], value: v }),
 						}),
 						h(SelectRow, {
-							label: '拦截动作',
-							value: (g.value && g.value.action) || 'ask',
+							label: '拦截动作', value: (g.value && g.value.action) || 'ask',
 							options: [
 								{ value: 'ask', label: 'ask — 弹出审批' },
 								{ value: 'deny', label: 'deny — 直接拒绝' },
 							],
-							onChange: v => write(NS_GATE, g, 'action', v),
+							onChange: v => write(NS_GATE, g, { op: 'set', path: ['action'], value: v }),
 						}),
 						h(ExcludeToolsRow, {
 							gate: g, busy,
-							onSave: (list, after) => write(NS_GATE, g, 'excludeTools', list, after),
+							onWrite: (op, after) => write(NS_GATE, g, op, after),
 						}),
-						writeError ? h('div', { style: { ...mutedStyle, color: '#c0392b' } }, '写入失败：' + writeError) : null,
+						writeError ? h('div', { className: 'dsh-gh-error' }, '写入失败：' + writeError) : null,
 					) : null,
 				)
 			}
@@ -219,6 +274,7 @@ window.__ModuleLoader__.load({
 		}
 
 		function apply(ctx) {
+			ensureStyles()
 			let connection = undefined
 			try {
 				connection = ctx.get('connection')
