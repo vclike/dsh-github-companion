@@ -220,7 +220,7 @@ describe('tool execute contracts', () => {
     expect(result2).toEqual({ ok: false, status: 422, message: 'Validation Failed' })
   })
 
-  it('github_list_issues filters out pull requests', async () => {
+  it('github_list_issues filters out pull requests and reports the exclusion', async () => {
     const { api } = makeApi({
       '/repos/o/r/issues': [
         { number: 1, title: 'real issue', state: 'open' },
@@ -231,6 +231,21 @@ describe('tool execute contracts', () => {
     const result = await toolByName(tools, 'github_list_issues').execute({ owner: 'o', repo: 'r' }, EXEC)
     const items = (result as { items: Array<{ number: number }> }).items
     expect(items.map(i => i.number)).toEqual([1])
+    expect(result).toMatchObject({ count: 1, prs_excluded: 1 })
+
+    // All-PR page must not read as "no issues exist".
+    const allPrApi = makeApi({
+      '/repos/o/r/issues': [
+        { number: 1, title: 'PR one', state: 'open', pull_request: { diff_url: 'x' } },
+        { number: 2, title: 'PR two', state: 'open', pull_request: { diff_url: 'y' } },
+      ],
+    })
+    const allPrResult = (await toolByName(
+      buildGithubTools(allPrApi.api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false }),
+      'github_list_issues',
+    ).execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(allPrResult).toMatchObject({ ok: true, count: 0, prs_excluded: 2 })
+    expect(String((allPrResult.note as string) ?? '')).toContain('pull request')
   })
 
   it('github_push_files rejects entries missing path/text before any request', async () => {

@@ -433,8 +433,24 @@ function listIssuesTool(api: GithubApi, config: GithubToolsConfig): ToolDefiniti
         exec.signal,
       )
       if (!response.ok) return failure(response.status, response.data)
-      const items = (response.data as IssueItem[]).filter(item => item.pull_request === undefined)
-      return { ok: true, count: items.length, items: items.map(shapeIssue), ...paginationFields(response) }
+      const raw = response.data as IssueItem[]
+      const items = raw.filter(item => item.pull_request === undefined)
+      return {
+        ok: true,
+        count: items.length,
+        // GitHub mixes pull requests into the issues endpoint; make the
+        // filtering visible so an empty page is never mistaken for "no
+        // issues exist".
+        prs_excluded: raw.length - items.length,
+        ...(raw.length > 0 && items.length === 0
+          ? {
+              note:
+                'Every entry on this page was a pull request (GitHub mixes them in). Raise per_page/page, or use github_search_issues with "is:issue".',
+            }
+          : {}),
+        items: items.map(shapeIssue),
+        ...paginationFields(response),
+      }
     },
   })
 }

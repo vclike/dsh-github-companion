@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.8 (2026-08-23)
+
+From a full read-path smoke test of every tool against the live API.
+
+- `github_list_issues` now reports `prs_excluded` and adds an explicit note
+  when a page contained only pull requests — previously an all-PR page was
+  indistinguishable from "no issues exist" (seen live on a repo where 9 of
+  10 entries were PRs).
+- Smoke-test verdicts for the rest: `get_repository`, `get_file_contents`
+  (file / directory / 404), all three searches, `list_issues`, `get_issue`,
+  `latest_release`, `list_starred/forks/commits` behave correctly; one
+  repo's `/pulls` endpoint 404s upstream (its own setting) and the tool
+  passes that through honestly — not a plugin bug.
+
 ## 0.4.7 (2026-08-23)
 
 Close out every finding from the live-use audit — one batch, no leftovers.
