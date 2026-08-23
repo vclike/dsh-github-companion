@@ -521,7 +521,19 @@ function createRepositoryTool(api: GithubApi): ToolDefinition {
         { name, ...(description ? { description } : {}), auto_init: autoInit },
         exec.signal,
       )
-      if (!response.ok) return failure(response.status, response.data)
+      if (!response.ok) {
+        const data = response.data as { message?: string; errors?: Array<{ message?: string }> }
+        const blob = [data.message, ...(data.errors ?? []).map(e => e.message)].filter(Boolean).join(' ')
+        const alreadyExists = response.status === 422 && /already exist/i.test(blob)
+        return {
+          ok: false,
+          status: response.status,
+          ...(alreadyExists ? { code: 'already_exists' } : {}),
+          message: alreadyExists
+            ? `Repository '${name}' already exists under your account — reuse it or pick another name.`
+            : blob || 'repository creation failed',
+        }
+      }
       const repo = response.data as { full_name?: string; html_url?: string; owner?: { login?: string } }
       return {
         ok: true,
@@ -703,7 +715,14 @@ function pushFilesTool(api: GithubApi): ToolDefinition {
       const files = args.files.map(file => ({ path: file.path as string, text: file.text as string }))
       const result = await api.pushFiles(args.owner, args.repo, args.branch, files, args.message, exec.signal)
       if (!result.ok) return { ok: false, status: result.status, message: result.message }
-      return { ok: true, branch: args.branch, commit_sha: result.commitSha ?? null, files: files.map(f => f.path) }
+      const sha = result.commitSha ?? null
+      return {
+        ok: true,
+        branch: args.branch,
+        commit_sha: sha,
+        commit_url: sha ? `https://github.com/${args.owner}/${args.repo}/commit/${sha}` : null,
+        files: files.map(f => f.path),
+      }
     },
   })
 }

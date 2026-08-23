@@ -98,5 +98,7 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
     }
   })
 
-  ctx.logger.info('github-tools ready (%s, %s)', config.apiBaseUrl, config.credentialRef)
+  // Defensive tail log: minimal embedders (tests, scripts) may pass a bare
+  // logger; a missing method must never fail an otherwise-successful apply.
+  ctx.logger?.info?.('github-tools ready (%s, %s)', config.apiBaseUrl, config.credentialRef)
 }

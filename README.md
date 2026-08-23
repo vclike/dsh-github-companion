@@ -49,6 +49,12 @@ restart. Without a token the tools work anonymously against public repos
 
 The token never reaches subprocesses or logs.
 
+> **Storage note**: a PAT saved through the settings UI persists server-side
+> in `~/.dsh/settings.yaml` as plaintext on disk (like the rest of that
+> document). `role('secret')` protects the wire and the UI — not the file.
+> If disk-plaintext is a concern, keep the token in an environment variable
+> via `credentialRef` instead and leave the UI field empty.
+
 ## Settings UI
 
 Both plugins register settings namespaces rendered by the DSH settings UI:

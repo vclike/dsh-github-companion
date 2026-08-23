@@ -59,5 +59,5 @@ export function apply(ctx: Context, config: GithubGateSection) {
     return { kind: 'ask', reason: `github-permission-gate requests approval for '${exec.name}' (mode=${current.mode}).` }
   })
 
-  ctx.logger.info('github-permission-gate ready (mode=%s, action=%s)', current.mode, current.action)
+  ctx.logger?.info?.('github-permission-gate ready (mode=%s, action=%s)', current.mode, current.action)
 }

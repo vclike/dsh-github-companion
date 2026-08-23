@@ -279,7 +279,12 @@ export class GithubApi {
     signal?: AbortSignal,
   ): Promise<{ ok: true; commitSha?: string } | { ok: false; status: number; message: string }> {
     const baseSha = await this.resolveRef(owner, repo, `heads/${branch}`, signal)
-    if (!baseSha) return { ok: false, status: 404, message: `Branch '${branch}' not found` }
+    if (!baseSha)
+      return {
+        ok: false,
+        status: 404,
+        message: `Branch '${branch}' not found — the repository may be empty. Create it with auto_init (README) or make one initial commit first.`,
+      }
 
     const baseCommit = await this.client.request<{ tree?: { sha?: string } }>(
       `/repos/${enc(owner)}/${enc(repo)}/git/commits/${baseSha}`,

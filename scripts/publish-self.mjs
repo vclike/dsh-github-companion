@@ -14,48 +14,17 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
+import { makeFakeCtx, readSavedToken, SCRIPT_CONFIG } from './lib/fake-ctx.mjs'
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const repoName = process.argv[2] ?? 'dsh-plugin-github'
 
-// --- token from the harness settings document (github-tools user layer) ---
-const settingsPath = join(process.env.USERPROFILE ?? process.env.HOME, '.dsh', 'settings.yaml')
-const yaml = readFileSync(settingsPath, 'utf8')
-const sectionMatch = yaml.match(/^github-tools:\r?\n((?:[ \t]+.*\r?\n?)*)/m)
-const tokenLine = sectionMatch?.[1]?.match(/^[ \t]+token:[ \t]*(\S+)/m)
-const token = tokenLine?.[1]
-if (!token) {
-  console.error('FAIL: no github-tools.token found in ~/.dsh/settings.yaml — save the PAT in the settings UI first.')
-  process.exit(1)
-}
-
-// --- mount the built plugin with a minimal fake context ---
+const token = readSavedToken()
+const ctx = makeFakeCtx({ token })
 const plugin = await import('../lib/index.js')
-const registered = []
-const ctx = {
-  logger: Object.assign(() => {}, { info() {}, warn() {}, error() {} }),
-  effect(fn) { return fn() },
-  on() {},
-  tools: { register(d) { registered.push(d); return () => {} } },
-  settings: { register(_ns, _s, o) { return { get: () => structuredClone(o?.base ?? {}), watch: () => () => {} } } },
-  credentials: {
-    resolve: async () => ({ value: token, source: 'settings' }),
-    describe: async () => ({ configured: true }),
-  },
-}
-plugin.apply(ctx, {
-  credentialRef: 'GITHUB_TOKEN',
-  apiBaseUrl: 'https://api.github.com',
-  requestTimeoutMs: 60_000,
-  maxRetries: 2,
-  maxPerPage: 30,
-  maxFileBytes: 262_144,
-  enableIssueWrites: false,
-  enableGitDataTools: true,
-  enableRepoCreation: true,
-})
-const byName = new Map(registered.map(t => [t.name, t]))
-const signal = new AbortController().signal
-const exec = { signal }
+plugin.apply(ctx, SCRIPT_CONFIG)
+const byName = new Map(ctx.registeredTools.map(t => [t.name, t]))
+const exec = { signal: new AbortController().signal }
 const call = async (name, args) => byName.get(name).execute(args, exec)
 
 // --- 1. identity ---
@@ -74,7 +43,7 @@ const created = await call('github_create_repository', {
 })
 if (created.ok === true) {
   console.log(`created: ${created.full_name} (private ✓)`)
-} else if (created.status === 422) {
+} else if (created.code === 'already_exists' || created.status === 422) {
   console.log(`create: repo ${repoName} already exists — continuing with upload`)
 } else {
   console.error(`FAIL: create_repository -> ${JSON.stringify(created).slice(0, 300)}`)
@@ -100,5 +69,5 @@ if (pushed.ok !== true) {
   console.error(`FAIL: push_files -> ${JSON.stringify(pushed).slice(0, 400)}`)
   process.exit(1)
 }
-console.log(`pushed: commit ${String(pushed.commit?.sha ?? pushed.sha ?? '(sha)')}`)
+console.log(`pushed: ${pushed.commit_url ?? pushed.commit_sha}`)
 console.log(`DONE — https://github.com/${me.login}/${repoName}`)
