@@ -55,6 +55,8 @@ export interface GithubResponse<T> {
   status: number
   ok: boolean
   data: T
+  /** Raw RFC 5988 Link header when the response carried one (pagination). */
+  link?: string | null
 }
 
 /** Network-level failure (DNS, connect, timeout, abort). Never carries secrets. */
@@ -199,8 +201,9 @@ export class GithubClient {
       }
       if (response.status === 204) return { status: 204, ok: true, data: undefined as T }
 
+      const link = response.headers.get('link')
       const data = (await response.json().catch(() => ({}))) as T & ApiErrorBody
-      if (response.ok) return { status: response.status, ok: true, data }
+      if (response.ok) return { status: response.status, ok: true, data, link }
 
       if (attempt + 1 < attempts && isRateLimited(response.status, response.headers)) {
         await sleep(retryDelayMs(response.headers, attempt), init.signal)
@@ -217,6 +220,7 @@ export class GithubClient {
                 message: `GitHub API returned ${response.status}`,
               }
         ) as T,
+        link,
       }
     }
 

@@ -295,7 +295,10 @@ function listCommitsTool(api: GithubApi, config: GithubToolsConfig): ToolDefinit
       owner: { type: 'string', required: true, description: 'Repository owner' },
       repo: { type: 'string', required: true, description: 'Repository name' },
       sha: { type: 'string', description: 'Branch, tag, or SHA to list from; defaults to the default branch' },
+      since: { type: 'string', description: 'Only commits after this ISO 8601 timestamp, e.g. 2026-08-16T00:00:00Z' },
+      until: { type: 'string', description: 'Only commits before this ISO 8601 timestamp' },
       per_page: { type: 'integer', description: `Results per page (1-${config.maxPerPage})` },
+      page: { type: 'integer', description: 'Page number; results carry has_more/next_page' },
     },
     output: {
       schema: { type: 'object', properties: {}, additionalProperties: true },
@@ -303,9 +306,21 @@ function listCommitsTool(api: GithubApi, config: GithubToolsConfig): ToolDefinit
     },
     async execute(args, exec): Promise<Value> {
       const perPage = clampPerPage(args.per_page, config)
-      const response = await api.listCommits(args.owner, args.repo, { sha: args.sha, perPage }, exec.signal)
+      const since = typeof args.since === 'string' && args.since.trim() ? args.since.trim() : undefined
+      const until = typeof args.until === 'string' && args.until.trim() ? args.until.trim() : undefined
+      const response = await api.listCommits(
+        args.owner,
+        args.repo,
+        { sha: args.sha, perPage, since, until, page: num(args.page) ?? undefined },
+        exec.signal,
+      )
       if (!response.ok) return failure(response.status, response.data)
-      return { ok: true, items: response.data.map(shapeCommit) }
+      return {
+        ok: true,
+        count: response.data.length,
+        items: response.data.map(shapeCommit),
+        ...paginationFields(response),
+      }
     },
   })
 }
@@ -403,6 +418,7 @@ function listIssuesTool(api: GithubApi, config: GithubToolsConfig): ToolDefiniti
       state: { type: 'string', enum: ['open', 'closed', 'all'], description: 'Filter by state; defaults to open' },
       labels: { type: 'string', description: 'Comma-separated label names to filter by' },
       per_page: { type: 'integer', description: `Results per page (1-${config.maxPerPage})` },
+      page: { type: 'integer', description: 'Page number; results carry has_more/next_page' },
     },
     output: {
       schema: { type: 'object', properties: {}, additionalProperties: true },
@@ -413,12 +429,12 @@ function listIssuesTool(api: GithubApi, config: GithubToolsConfig): ToolDefiniti
       const response = await api.listIssues(
         args.owner,
         args.repo,
-        { state: args.state, labels: args.labels, perPage },
+        { state: args.state, labels: args.labels, perPage, page: num(args.page) ?? undefined },
         exec.signal,
       )
       if (!response.ok) return failure(response.status, response.data)
       const items = (response.data as IssueItem[]).filter(item => item.pull_request === undefined)
-      return { ok: true, items: items.map(shapeIssue) }
+      return { ok: true, count: items.length, items: items.map(shapeIssue), ...paginationFields(response) }
     },
   })
 }
@@ -812,8 +828,28 @@ function clampPerPage(value: number | undefined, config: GithubToolsConfig): num
   return Math.max(1, Math.min(Math.floor(value), config.maxPerPage))
 }
 
+/**
+ * Pagination awareness from the RFC 5988 Link header: a `rel="next"` entry
+ * means more results exist beyond this page. Returns the next page number,
+ * or null when this is the last page (or the header was absent).
+ */
+function nextPageFromLink(link: string | null | undefined): number | null {
+  if (!link) return null
+  for (const part of link.split(',')) {
+    const m = part.match(/<[^>]*[?&]page=(\d+)[^>]*>\s*;\s*rel="next"/i)
+    if (m) return Number(m[1])
+  }
+  return null
+}
+
+/** Canonical pagination fields appended to every paged list result. */
+function paginationFields(response: { link?: string | null }): { has_more: boolean; next_page: number | null } {
+  const next = nextPageFromLink(response.link)
+  return { has_more: next !== null, next_page: next }
+}
+
 /** All tool factories grouped by phase for registration-time gating. */
-function shapeRelease(data: unknown): Value {
+function shapeRelease(data: unknown, includeBody = true): Value {
   const d = data as ReleaseItem
   return {
     id: num(d.id),
@@ -824,7 +860,7 @@ function shapeRelease(data: unknown): Value {
     created_at: str(d.created_at),
     published_at: str(d.published_at),
     html_url: str(d.html_url),
-    body: d.body ?? null,
+    ...(includeBody ? { body: d.body ?? null } : { body_omitted: true }),
   }
 }
 
@@ -837,16 +873,23 @@ function listReleasesTool(api: GithubApi, config: GithubToolsConfig): ToolDefini
       owner: { type: 'string', required: true, description: 'Repository owner (user or org)' },
       repo: { type: 'string', required: true },
       per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 10)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
     },
     output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
     async execute(args, exec): Promise<Value> {
-      const response = await api.listReleases(String(args.owner), String(args.repo), num(args.per_page) ?? undefined, exec.signal)
+      const response = await api.listReleases(
+        String(args.owner),
+        String(args.repo),
+        { perPage: num(args.per_page) ?? undefined, page: num(args.page) ?? undefined },
+        exec.signal,
+      )
       if (!response.ok) return failure(response.status, response.data)
       const releases = Array.isArray(response.data) ? response.data : []
       return {
         ok: true,
         count: releases.length,
-        releases: releases.map(shapeRelease),
+        releases: releases.map(r => shapeRelease(r)),
+        ...paginationFields(response),
       }
     },
   })
@@ -856,16 +899,28 @@ function latestReleaseTool(api: GithubApi): ToolDefinition {
   return defineTool({
     name: 'github_latest_release',
     description:
-      'Get the latest published release of a repository. 404 means the repository has no releases yet.',
+      "Get the latest published release of a repository. A repository with no releases resolves ok with has_releases: false (not an error). Release notes body is omitted unless include_body is true — request it only when you need the full notes.",
     parameters: {
       owner: { type: 'string', required: true, description: 'Repository owner (user or org)' },
       repo: { type: 'string', required: true },
+      include_body: {
+        type: 'boolean',
+        description: 'Include the full release-notes body (can be long); default false',
+      },
     },
     output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
     async execute(args, exec): Promise<Value> {
       const response = await api.latestRelease(String(args.owner), String(args.repo), exec.signal)
+      if (!response.ok && response.status === 404) {
+        return {
+          ok: true,
+          has_releases: false,
+          note: `No published releases in ${args.owner}/${args.repo} yet.`,
+        }
+      }
       if (!response.ok) return failure(response.status, response.data)
-      return { ok: true, ...shapeRelease(response.data) }
+      const shaped = shapeRelease(response.data, args.include_body === true)
+      return { ok: true, has_releases: true, ...shaped }
     },
   })
 }
@@ -942,16 +997,21 @@ function listStarredTool(api: GithubApi, config: GithubToolsConfig): ToolDefinit
       'List repositories the authenticated user has starred (most recently starred first). This is the natural watchlist for tracking digests. Anonymous mode cannot call this.',
     parameters: {
       per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
     },
     output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
     async execute(args, exec): Promise<Value> {
-      const response = await api.listStarred(num(args.per_page) ?? undefined, exec.signal)
+      const response = await api.listStarred(
+        { perPage: num(args.per_page) ?? undefined, page: num(args.page) ?? undefined },
+        exec.signal,
+      )
       if (!response.ok) return failure(response.status, response.data)
       const repos = Array.isArray(response.data) ? response.data : []
       return {
         ok: true,
         count: repos.length,
         repos: repos.map(shapeRepo),
+        ...paginationFields(response),
       }
     },
   })
@@ -964,37 +1024,65 @@ function listForksTool(api: GithubApi, config: GithubToolsConfig): ToolDefinitio
       "List the authenticated user's forked repositories with upstream freshness: parent repository and whether the upstream has been pushed to more recently than your fork (a lightweight hint, not an exact commit diff). Pair with github_sync_fork to bring a fork up to date.",
     parameters: {
       per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
     },
     output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
     async execute(args, exec): Promise<Value> {
-      const response = await api.listOwnedRepositories(num(args.per_page) ?? undefined, exec.signal)
+      const response = await api.listOwnedRepositories(
+        { perPage: num(args.per_page) ?? undefined, page: num(args.page) ?? undefined },
+        exec.signal,
+      )
       if (!response.ok) return failure(response.status, response.data)
       const repos = Array.isArray(response.data) ? response.data : []
-      const forks = repos
-        .filter(r => (r as { fork?: boolean }).fork === true)
-        .map(raw => {
-          const r = raw as {
-            full_name?: string
-            html_url?: string
-            pushed_at?: string
-            parent?: { full_name?: string; pushed_at?: string; html_url?: string }
-          }
-          const mine = str(r.pushed_at) ?? ''
-          const upstream = str(r.parent?.pushed_at) ?? ''
-          return {
-            full_name: str(r.full_name),
-            html_url: str(r.html_url),
-            pushed_at: mine || null,
-            parent_full_name: str(r.parent?.full_name),
-            parent_html_url: str(r.parent?.html_url),
-            parent_pushed_at: upstream || null,
-            upstream_newer: Boolean(upstream && (!mine || upstream > mine)),
-          }
-        })
+      const forkRows = repos.filter(r => (r as { fork?: boolean }).fork === true)
+      // List endpoints omit `parent`; single-repo fetches carry it. Enrich
+      // small result sets so upstream_newer is meaningful; large sets keep
+      // null parents with an explicit note instead of silent staleness.
+      const details = new Map<string, unknown>()
+      if (forkRows.length > 0 && forkRows.length <= 10) {
+        for (const row of forkRows) {
+          const fullName = (row as { full_name?: string }).full_name
+          if (!fullName || !fullName.includes('/')) continue
+          const [o, ...rest] = fullName.split('/')
+          if (!o) continue
+          const detail = await api.getRepository(o, rest.join('/'), exec.signal)
+          if (detail.ok) details.set(fullName, detail.data)
+        }
+      }
+      let enrichmentFailed = false
+      const forks = forkRows.map(raw => {
+        const r = raw as {
+          full_name?: string
+          html_url?: string
+          pushed_at?: string
+          parent?: { full_name?: string; pushed_at?: string; html_url?: string } | undefined
+        }
+        let parent = r.parent
+        if (!parent && r.full_name && details.has(r.full_name)) {
+          const d = details.get(r.full_name) as typeof r
+          parent = d?.parent
+        }
+        if (!parent && r.full_name) enrichmentFailed = true
+        const mine = str(r.pushed_at) ?? ''
+        const upstream = str(parent?.pushed_at) ?? ''
+        return {
+          full_name: str(r.full_name),
+          html_url: str(r.html_url),
+          pushed_at: mine || null,
+          parent_full_name: str(parent?.full_name),
+          parent_html_url: str(parent?.html_url),
+          parent_pushed_at: upstream || null,
+          upstream_newer: Boolean(upstream && (!mine || upstream > mine)),
+        }
+      })
       return {
         ok: true,
         count: forks.length,
         stale_count: forks.filter(f => f.upstream_newer).length,
+        ...(enrichmentFailed
+          ? { note: 'Some upstream details could not be fetched (parent fields may be null).' }
+          : {}),
+        ...paginationFields(response),
         forks,
       }
     },
@@ -1008,21 +1096,35 @@ function listWatchedTool(api: GithubApi, config: GithubToolsConfig): ToolDefinit
       'List repositories the authenticated user watches (notification subscriptions). Note: watching is opt-in on GitHub — many users never watch anything; star lists are usually the better tracking source.',
     parameters: {
       per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
     },
     output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
     async execute(args, exec): Promise<Value> {
-      const response = await api.listWatched(num(args.per_page) ?? undefined, exec.signal)
+      const response = await api.listWatched(
+        { perPage: num(args.per_page) ?? undefined, page: num(args.page) ?? undefined },
+        exec.signal,
+      )
       if (!response.ok) return failure(response.status, response.data)
+      // /user/subscriptions returns repository objects directly (no
+      // subscription wrapper); tolerate a wrapped shape defensively.
       const subs = Array.isArray(response.data) ? response.data : []
       const items = subs.map(raw => {
-        const s = raw as { reason?: string; repository?: { full_name?: string; html_url?: string } }
+        const s = raw as {
+          reason?: string
+          full_name?: string
+          html_url?: string
+          pushed_at?: string
+          repository?: { full_name?: string; html_url?: string; pushed_at?: string }
+        }
+        const repo = s.repository ?? s
         return {
-          full_name: str(s.repository?.full_name),
-          html_url: str(s.repository?.html_url),
-          reason: str(s.reason),
+          full_name: str(repo.full_name),
+          html_url: str(repo.html_url),
+          pushed_at: str(repo.pushed_at),
+          ...(s.reason ? { reason: str(s.reason) } : {}),
         }
       })
-      return { ok: true, count: items.length, subscriptions: items }
+      return { ok: true, count: items.length, subscriptions: items, ...paginationFields(response) }
     },
   })
 }

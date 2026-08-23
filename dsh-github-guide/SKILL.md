@@ -85,11 +85,15 @@ watchlist 来源（按优先级）：用户点名的 `owner/repo` 列表；用�
 
 对确定下来的每个 `owner/repo`：
 
-1. `github_latest_release` —— 有新 release 则记录版本号与日期；404 表示尚无发布
+1. `github_latest_release` —— 返回 `{ok:true, has_releases:false}` 即"尚无发布"（正常
+   状态，不是错误）；默认不带正文，需要读完整说明才传 `include_body:true`
 2. `github_list_issues`（默认 open）—— 挑出互动多（评论多）或标题与用户兴趣相关的
-3. 可选：`github_list_commits` 看最近一周活跃度
+3. 可选：`github_list_commits {since:'一周前 ISO 时间'}` 精确圈定一周活跃度
 4. 按"每仓库一小节：最新版本 / 值得关注的 issue / 活跃度"输出汇总，最后给一句
    总体建议
+
+分页约定：所有列表类结果都带 `has_more`/`next_page`——为 true 时数据未取全，按需
+带 `page` 参数续拉，不要把单页结果当成完整列表。
 
 注意：仓库多且未配置令牌时会撞 60 次/小时匿名限速——先探测凭证，超量时主动分批。
 

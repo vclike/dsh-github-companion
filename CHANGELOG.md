@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.6 (2026-08-23)
+
+Fixes found by live use (star digest + fork/watch audit), plus pagination
+awareness across every list tool.
+
+- `github_list_watched`: hit the correct endpoint `/user/subscriptions`
+  (bare `/subscriptions` 404s) and map entries as repository objects — the
+  endpoint returns repos directly, not subscription wrappers, so previous
+  results were all null.
+- `github_list_forks`: list responses omit `parent`, leaving
+  `upstream_newer` always false. Fork sets of ≤10 are now enriched via
+  single-repo detail fetches; larger sets carry an explicit note instead of
+  silent staleness.
+- `github_latest_release`: a repo with no releases now resolves
+  `{ok:true, has_releases:false}` instead of an error-shaped 404; notes
+  body omitted by default (`include_body:true` to opt in) so multi-repo
+  scans stop flooding context.
+- `github_list_commits`: new `since`/`until` ISO filters for precise
+  windows (weekly digests no longer over-fetch).
+- All list tools (`starred/forks/watched/releases/issues/commits`) now
+  report `has_more`/`next_page` parsed from the Link header and accept a
+  `page` parameter — silent truncation is gone.
+
 ## 0.4.5 (2026-08-23)
 
 Fix: picked folder never reached the input.

@@ -333,9 +333,11 @@ describe('tool execute contracts', () => {
   })
 
   it('github_list_watched shapes subscription entries', async () => {
+    // Verified against the live API (v0.4.6): GET /user/subscriptions returns
+    // repository objects directly — no subscription wrapper.
     const { api } = makeApi({
-      '/subscriptions': [
-        { reason: 'subscribed', repository: { full_name: 'a/b', html_url: 'w1' } },
+      '/user/subscriptions': [
+        { full_name: 'a/b', html_url: 'w1', pushed_at: '2026-08-20T00:00:00Z' },
       ],
     })
     const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false })
@@ -344,7 +346,7 @@ describe('tool execute contracts', () => {
       subscriptions: Array<Record<string, unknown>>
     }
     expect(result.count).toBe(1)
-    expect(result.subscriptions[0]).toMatchObject({ full_name: 'a/b', reason: 'subscribed' })
+    expect(result.subscriptions[0]).toMatchObject({ full_name: 'a/b', pushed_at: '2026-08-20T00:00:00Z' })
   })
 
   it('github_sync_fork reports up-to-date, success and conflict distinctly', async () => {
@@ -429,5 +431,102 @@ describe('tool execute contracts', () => {
       EXEC,
     )) as Record<string, unknown>
     expect(conflict).toMatchObject({ ok: false, status: 422, code: 'tag_already_exists' })
+  })
+})
+
+describe('v0.4.6 fixes from live-use findings', () => {
+  /** Header-aware fake fetch for tests that need Link headers / status codes. */
+  function makeRawApi(handler: (url: URL) => Response) {
+    const calls: string[] = []
+    const fetchImpl = (url: string | URL | globalThis.Request): Promise<Response> => {
+      const u = new URL(String(url))
+      calls.push(u.toString())
+      return Promise.resolve(handler(u))
+    }
+    const client = new GithubClient(
+      { ...CONFIG, getToken: async () => 'tok', describeToken: async () => ({ configured: true }) },
+      fetchImpl as unknown as typeof fetch,
+    )
+    return { api: new GithubApi(client), calls }
+  }
+
+  function tools(api: GithubApi, gitData = false) {
+    return buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: gitData })
+  }
+
+  it('github_list_watched hits /user/subscriptions and maps repo-direct entries', async () => {
+    const { api, calls } = makeRawApi(u =>
+      u.pathname === '/user/subscriptions'
+        ? jsonResponse(200, [
+            { full_name: 'o/w1', html_url: 'https://github.com/o/w1', pushed_at: '2026-08-20T00:00:00Z' },
+          ])
+        : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const result = (await toolByName(tools(api), 'github_list_watched').execute({}, EXEC)) as Record<string, unknown>
+    expect(calls[0]).toContain('/user/subscriptions')
+    expect(result).toMatchObject({ ok: true, count: 1, has_more: false, next_page: null })
+    expect((result.subscriptions as Array<Record<string, unknown>>)[0].full_name).toBe('o/w1')
+  })
+
+  it('github_list_forks enriches missing parent via single-repo detail', async () => {
+    const { api } = makeRawApi(u => {
+      if (u.pathname === '/user/repos')
+        return jsonResponse(200, [{ fork: true, full_name: 'me/f1', pushed_at: '2020-01-30T00:40:07Z' }])
+      if (u.pathname === '/repos/me/f1')
+        return jsonResponse(200, {
+          parent: { full_name: 'up/orig', pushed_at: '2026-08-20T10:00:00Z', html_url: 'https://github.com/up/orig' },
+        })
+      return jsonResponse(404, { message: `no route ${u.pathname}` })
+    })
+    const result = (await toolByName(tools(api), 'github_list_forks').execute({}, EXEC)) as Record<string, unknown>
+    const fork = (result.forks as Array<Record<string, unknown>>)[0]
+    expect(fork).toMatchObject({
+      full_name: 'me/f1',
+      parent_full_name: 'up/orig',
+      upstream_newer: true,
+    })
+    expect(result.stale_count).toBe(1)
+  })
+
+  it('github_latest_release maps 404 to ok:true has_releases:false and gates the notes body', async () => {
+    const { api } = makeRawApi(u =>
+      u.pathname === '/repos/o/r/releases/latest'
+        ? new Response(JSON.stringify({ id: 1, tag_name: 'v9', published_at: '2026-08-21T00:00:00Z', html_url: 'u', body: 'LONG NOTES' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : u.pathname === '/repos/none/x/releases/latest'
+          ? jsonResponse(404, { message: 'Not Found' })
+          : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const t = toolByName(tools(api), 'github_latest_release')
+    const empty = (await t.execute({ owner: 'none', repo: 'x' }, EXEC)) as Record<string, unknown>
+    expect(empty).toMatchObject({ ok: true, has_releases: false })
+
+    const compact = (await t.execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(compact).toMatchObject({ ok: true, has_releases: true, tag_name: 'v9', body_omitted: true })
+    expect(compact.body).toBeUndefined()
+
+    const withBody = (await t.execute({ owner: 'o', repo: 'r', include_body: true }, EXEC)) as Record<string, unknown>
+    expect(withBody.body).toBe('LONG NOTES')
+  })
+
+  it('github_list_commits forwards since/until and reports pagination from Link header', async () => {
+    const { api, calls } = makeRawApi(() =>
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          link: '<https://api.github.com/repos/o/r/commits?page=2>; rel="next"',
+        },
+      }),
+    )
+    const result = (await toolByName(tools(api), 'github_list_commits').execute(
+      { owner: 'o', repo: 'r', since: '2026-08-16T00:00:00Z', until: '2026-08-23T23:59:59Z' },
+      EXEC,
+    )) as Record<string, unknown>
+    expect(decodeURIComponent(calls[0])).toContain('since=2026-08-16T00:00:00Z')
+    expect(decodeURIComponent(calls[0])).toContain('until=2026-08-23T23:59:59Z')
+    expect(result).toMatchObject({ ok: true, count: 0, has_more: true, next_page: 2 })
   })
 })

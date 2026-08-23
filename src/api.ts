@@ -89,11 +89,11 @@ export class GithubApi {
   listCommits(
     owner: string,
     repo: string,
-    opts: { sha?: string; perPage?: number } = {},
+    opts: { sha?: string; perPage?: number; since?: string; until?: string; page?: number } = {},
     signal?: AbortSignal,
   ): Promise<GithubResponse<unknown[]>> {
     return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/commits`, {
-      query: { sha: opts.sha, per_page: opts.perPage },
+      query: { sha: opts.sha, per_page: opts.perPage, since: opts.since, until: opts.until, page: opts.page },
       signal,
     })
   }
@@ -140,11 +140,11 @@ export class GithubApi {
   listIssues(
     owner: string,
     repo: string,
-    opts: { state?: 'open' | 'closed' | 'all'; labels?: string; perPage?: number } = {},
+    opts: { state?: 'open' | 'closed' | 'all'; labels?: string; perPage?: number; page?: number } = {},
     signal?: AbortSignal,
   ): Promise<GithubResponse<IssueItem[]>> {
     return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/issues`, {
-      query: { state: opts.state, labels: opts.labels, per_page: opts.perPage },
+      query: { state: opts.state, labels: opts.labels, per_page: opts.perPage, page: opts.page },
       signal,
     })
   }
@@ -238,27 +238,39 @@ export class GithubApi {
     })
   }
 
-  listReleases(owner: string, repo: string, perPage?: number, signal?: AbortSignal): Promise<GithubResponse<ReleaseItem[]>> {
-    const query = perPage ? `?per_page=${Math.min(Math.max(perPage, 1), 100)}` : ''
-    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases${query}`, { signal })
+  listReleases(
+    owner: string,
+    repo: string,
+    opts: { perPage?: number; page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<ReleaseItem[]>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases`, {
+      query: { per_page: opts.perPage, page: opts.page },
+      signal,
+    })
   }
 
   /** Repositories the authenticated user has starred (`/user/starred`). */
-  listStarred(perPage?: number, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
-    const query = perPage ? `?per_page=${Math.min(Math.max(perPage, 1), 100)}` : ''
-    return this.client.request(`/user/starred${query}`, { signal })
+  listStarred(opts: { perPage?: number; page?: number } = {}, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
+    return this.client.request('/user/starred', { query: { per_page: opts.perPage, page: opts.page }, signal })
   }
 
   /** Repositories owned by the authenticated user (used to find forks). */
-  listOwnedRepositories(perPage?: number, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
-    const query = perPage ? `?type=owner&sort=pushed&per_page=${Math.min(Math.max(perPage, 1), 100)}` : '?type=owner&sort=pushed'
-    return this.client.request(`/user/repos${query}`, { signal })
+  listOwnedRepositories(
+    opts: { perPage?: number; page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<unknown[]>> {
+    const query = { type: 'owner', sort: 'pushed', per_page: opts.perPage, page: opts.page }
+    return this.client.request(`/user/repos`, { query, signal })
   }
 
-  /** Repositories the authenticated user watches (`/subscriptions`). */
-  listWatched(perPage?: number, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
-    const query = perPage ? `?per_page=${Math.min(Math.max(perPage, 1), 100)}` : ''
-    return this.client.request(`/subscriptions${query}`, { signal })
+  /**
+   * Repositories the authenticated user watches. The correct endpoint is
+   * `/user/subscriptions` — bare `/subscriptions` 404s; it returns
+   * repository objects directly, not subscription wrappers.
+   */
+  listWatched(opts: { perPage?: number; page?: number } = {}, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
+    return this.client.request('/user/subscriptions', { query: { per_page: opts.perPage, page: opts.page }, signal })
   }
 
   /**
