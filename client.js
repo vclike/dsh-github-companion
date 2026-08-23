@@ -177,6 +177,30 @@ window.__ModuleLoader__.load({
 					)
 			}
 
+			/** Single-line text setting; saves on button press (draft === null = clean). */
+			function TextRow({ label, hint, placeholder, field, value, busy, onWrite }) {
+				const current = typeof value === 'string' ? value : ''
+				const [draft, setDraft] = useState(null)
+				const text = draft === null ? current : draft
+				const dirty = draft !== null && draft.trim() !== current
+				return h('div', { className: 'dsh-gh-row stack' },
+					h('div', { className: 'dsh-gh-labels' },
+						h('span', null, label),
+						hint ? h('span', { className: 'dsh-gh-hint' }, hint) : null),
+					h('div', { className: 'dsh-gh-row', style: { padding: 0, gap: 8 } },
+						h('input', {
+							className: 'dsh-gh-input', spellCheck: false, value: text,
+							placeholder: placeholder || '', disabled: busy,
+							onChange: e => setDraft(e.target.value),
+						}),
+						dirty ? h('button', {
+							className: 'dsh-gh-btn primary', disabled: busy,
+							onClick: () => onWrite({ op: 'set', path: [field], value: draft.trim() }, () => setDraft(null)),
+						}, '保存') : null,
+					),
+				)
+			}
+
 			function Group({ title, children }) {
 				return h('div', { className: 'dsh-gh-group' },
 					h('h3', { className: 'dsh-gh-title' }, title), children)
@@ -253,6 +277,20 @@ window.__ModuleLoader__.load({
 							label: '自动新建仓库', hint: '允许 agent 创建新的私有仓库（强制 private，无法创建公开仓库；需令牌含 Administration 权限）',
 							checked: !!(t.value && t.value.enableRepoCreation),
 							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableRepoCreation'], value: v }),
+						}),
+						h(TextRow, {
+							label: '本地工作区目录', field: 'workspaceRoot',
+							hint: '克隆/检出的仓库放这里（如 D:\\work_space\\github）。留空 = 无约定，agent 每次会问。agent 通过 github_get_me 读取此路径。',
+							placeholder: '例如 D:\\work_space\\github',
+							value: t.value && t.value.workspaceRoot, busy,
+							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
+						}),
+						h(TextRow, {
+							label: 'API 代理', field: 'proxyUrl',
+							hint: '访问 api.github.com 走的 HTTP(S) 代理。Node 不读系统代理，直连超时才需要填；改动实时生效。',
+							placeholder: '例如 http://127.0.0.1:7890',
+							value: t.value && t.value.proxyUrl, busy,
+							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
 						}),
 						h('div', { className: 'dsh-gh-muted' },
 							'当前凭证来源：' + tokenSource + '。改动实时生效。'),

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 (2026-08-23)
+
+Workspace convention + proxy support.
+
+- New settings (user-editable, live-applied): `workspaceRoot` — the local
+  root directory for cloned/checked-out repositories, surfaced to the agent
+  via `github_get_me.workspace_root` so recipes never have to ask; and
+  `proxyUrl` — optional HTTP(S) proxy for api.github.com routed through
+  undici's ProxyAgent (Node's fetch ignores system proxy settings). Both
+  also settable as composition-layer defaults in cordis.yml.
+- Settings card gains two text rows for the new fields.
+
 ## 0.3.0 (2026-08-23)
 
 Fork / watch tracking + one-command fork sync.

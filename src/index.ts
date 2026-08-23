@@ -38,6 +38,8 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
       enableIssueWrites: config.enableIssueWrites,
       enableGitDataTools: config.enableGitDataTools,
       enableRepoCreation: config.enableRepoCreation,
+      workspaceRoot: config.workspaceRoot,
+      proxyUrl: config.proxyUrl,
     },
     applies: 'live',
   })
@@ -50,10 +52,21 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
     return typeof section.token === 'string' ? section.token.trim() : ''
   }
 
+  // User-layer string settings fall back to the composition config.
+  const sectionString = (key: 'workspaceRoot' | 'proxyUrl'): string => {
+    const section = sectionScope.get() as unknown as Record<string, unknown>
+    const value = section[key]
+    return typeof value === 'string' ? value.trim() : ''
+  }
+
   const client = new GithubClient({
     apiBaseUrl: config.apiBaseUrl,
     requestTimeoutMs: config.requestTimeoutMs,
     maxRetries: config.maxRetries,
+    // Read live so a proxy change reaches the next request without a restart.
+    get proxyUrl() {
+      return sectionString('proxyUrl')
+    },
     getToken: async () => {
       const inline = sectionToken()
       if (inline) return inline

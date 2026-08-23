@@ -77,6 +77,20 @@ describe('tool execute contracts', () => {
     const result = await toolByName(buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false }), 'github_get_me')
       .execute({}, EXEC)
     expect(result).toMatchObject({ ok: true, authenticated: true, login: 'octocat' })
+    expect((result as Record<string, unknown>).workspace_root).toBeNull()
+  })
+
+  it('github_get_me surfaces workspace_root; section override wins over config', async () => {
+    const { api } = makeApi({ '/user': { login: 'octocat' } })
+    // config-level default
+    const withConfig = buildGithubTools(api, { ...CONFIG, workspaceRoot: 'D:/ws/github' }, { enableIssueWrites: false, enableGitDataTools: false })
+    expect(((await toolByName(withConfig, 'github_get_me').execute({}, EXEC)) as Record<string, unknown>).workspace_root).toBe('D:/ws/github')
+    // user-layer section value wins
+    const withOverride = buildGithubTools(api, { ...CONFIG, workspaceRoot: 'D:/ws/github' }, { enableIssueWrites: false, enableGitDataTools: false, workspaceRoot: 'D:/elsewhere' })
+    expect(((await toolByName(withOverride, 'github_get_me').execute({}, EXEC)) as Record<string, unknown>).workspace_root).toBe('D:/elsewhere')
+    // empty section string falls back to config
+    const withEmpty = buildGithubTools(api, { ...CONFIG, workspaceRoot: 'D:/ws/github' }, { enableIssueWrites: false, enableGitDataTools: false, workspaceRoot: '  ' })
+    expect(((await toolByName(withEmpty, 'github_get_me').execute({}, EXEC)) as Record<string, unknown>).workspace_root).toBe('D:/ws/github')
   })
 
   it('github_get_me answers anonymous state WITHOUT a network call when unconfigured', async () => {

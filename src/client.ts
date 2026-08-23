@@ -31,6 +31,12 @@ export interface GithubClientOptions {
    * when absent or failing, callers fall back to asking the API itself.
    */
   describeToken?: () => Promise<{ configured: boolean }>
+  /**
+   * Optional HTTP(S) proxy for GitHub API traffic (e.g. `http://127.0.0.1:7890`).
+   * Node's global fetch ignores system proxy settings, so this must be
+   * explicit. Routed through undici's ProxyAgent as a per-request dispatcher.
+   */
+  proxyUrl?: string
 }
 
 export interface GithubRequestInit {
@@ -97,10 +103,37 @@ function retryDelayMs(headers: Headers, attempt: number): number {
 export class GithubClient {
   private readonly options: GithubClientOptions
   private readonly fetchImpl: typeof fetch
+  /** Cached undici ProxyAgent for `proxyUrl`, keyed by URL (live re-sync). */
+  private dispatcherCache?: { url: string; promise: Promise<unknown> }
 
   constructor(options: GithubClientOptions, fetchImpl: typeof fetch = fetch) {
     this.options = options
     this.fetchImpl = fetchImpl.bind(globalThis)
+  }
+
+  /**
+   * Resolve the proxy dispatcher once per distinct proxyUrl. A missing or
+   * failed optional `undici` import degrades to a direct connection with a
+   * console warning rather than breaking every request.
+   */
+  private async getDispatcher(): Promise<unknown> {
+    const proxyUrl = this.options.proxyUrl?.trim()
+    if (!proxyUrl) return undefined
+    if (this.dispatcherCache?.url !== proxyUrl) {
+      this.dispatcherCache = {
+        url: proxyUrl,
+        promise: import('undici')
+          .then(({ ProxyAgent }) => new ProxyAgent(proxyUrl) as unknown)
+          .catch(cause => {
+            console.warn(
+              `[dsh-plugin-github] proxyUrl '${proxyUrl}' could not be loaded (undici unavailable) — falling back to direct connection.`,
+              cause,
+            )
+            return undefined
+          }),
+      }
+    }
+    return this.dispatcherCache.promise
   }
 
   /** Absolute URL for a repo-relative API path (`/repos/…`, `/search/…`, `/user`). */
@@ -147,13 +180,16 @@ export class GithubClient {
           ? AbortSignal.any([init.signal, timeoutSignal])
           : timeoutSignal
       let response: Response
+      const dispatcher = await this.getDispatcher()
       try {
         response = await this.fetchImpl(this.url(path, init.query), {
           method: init.method ?? 'GET',
           headers,
           body: init.body === undefined ? undefined : JSON.stringify(init.body),
           signal: composed,
-        })
+          // undici extension honored by Node's global fetch; typed loosely.
+          ...(dispatcher ? { dispatcher } : {}),
+        } as RequestInit)
       } catch (cause) {
         if (init.signal?.aborted) throw new GithubNetworkError('GitHub request aborted', cause)
         throw new GithubNetworkError(

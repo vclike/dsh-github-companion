@@ -139,7 +139,7 @@ export const GITHUB_WRITE_TOOLS: ReadonlySet<string> = new Set([
 // Phase 1 — read-only discovery
 // ---------------------------------------------------------------------------
 
-function getMeTool(api: GithubApi): ToolDefinition {
+function getMeTool(api: GithubApi, workspaceRoot?: string): ToolDefinition {
   return defineTool({
     name: 'github_get_me',
     description:
@@ -150,6 +150,9 @@ function getMeTool(api: GithubApi): ToolDefinition {
       render: TEXT_RENDER,
     },
     async execute(_args, exec): Promise<Value> {
+      // Local workspace convention travels with the auth probe so recipes can
+      // reference it without a separate tool or asking the user every time.
+      const root = workspaceRoot?.trim() || null
       // Auth-state probe first: an unconfigured credential is a normal state
       // worth answering without burning a rate-limited request (and without
       // surfacing GitHub's 401 as if something were broken).
@@ -161,13 +164,21 @@ function getMeTool(api: GithubApi): ToolDefinition {
           login: null,
           name: null,
           html_url: null,
+          workspace_root: root,
           note: 'No credential is configured for this reference. Requests run anonymously: public data only, 60 req/h core limit, and every write tool will fail with 401.',
         }
       }
       const response = await api.getAuthenticatedUser(exec.signal)
       if (!response.ok) return failure(response.status, response.data)
       const user = response.data as { login?: string; name?: string; html_url?: string }
-      return { ok: true, authenticated: true, login: user.login ?? null, name: user.name ?? null, html_url: user.html_url ?? null }
+      return {
+        ok: true,
+        authenticated: true,
+        login: user.login ?? null,
+        name: user.name ?? null,
+        html_url: user.html_url ?? null,
+        workspace_root: root,
+      }
     },
   })
 }
@@ -1032,10 +1043,17 @@ function syncForkTool(api: GithubApi): ToolDefinition {
 export function buildGithubTools(
   api: GithubApi,
   config: GithubToolsConfig,
-  section: { enableIssueWrites: boolean; enableGitDataTools: boolean; enableRepoCreation?: boolean },
+  section: {
+    enableIssueWrites: boolean
+    enableGitDataTools: boolean
+    enableRepoCreation?: boolean
+    /** User-layer override for the workspace convention (wins over config). */
+    workspaceRoot?: string
+  },
 ): ToolDefinition[] {
+  const effectiveWorkspaceRoot = section.workspaceRoot?.trim() || config.workspaceRoot
   const tools = [
-    getMeTool(api),
+    getMeTool(api, effectiveWorkspaceRoot),
     getRepositoryTool(api),
     getFileContentsTool(api, config),
     listCommitsTool(api, config),

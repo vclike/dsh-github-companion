@@ -107,7 +107,10 @@ Fine-grained tokens）：
 
 两个插件各自注册了设置命名空间，会渲染在 DSH 设置界面中：
 
-- `github-tools`：`enableIssueWrites`、`enableGitDataTools`、`enableRepoCreation`
+- `github-tools`：`enableIssueWrites`、`enableGitDataTools`、`enableRepoCreation`、
+  `workspaceRoot`（克隆/检出的本地根目录；留空 = 无约定，agent 每次询问；agent 经
+  `github_get_me` 读取该路径）、`proxyUrl`（访问 api.github.com 的可选 HTTP(S) 代理
+  ——Node 的 fetch 不读系统代理，需要时在此显式填写；改动实时生效）
 - `github-gate`：`mode`（`off|writes|all`）、`action`（`ask|deny`）、`excludeTools`
 
 组合层默认值来自 cordis.yml 插入行（`base` 层）；修改实时生效。
@@ -167,6 +170,8 @@ dsh plugin add <你的检出目录>/dsh-plugin-github/dsh-github-guide
         enableIssueWrites: true          # 组合层默认（设置界面可覆盖）
         enableGitDataTools: false        # 组合层默认（设置界面可覆盖）
         enableRepoCreation: false        # 组合层默认（设置界面可覆盖）
+        workspaceRoot: ''                # 克隆仓库的本地根目录（留空 = 每次询问）
+        proxyUrl: ''                     # api.github.com 的可选 HTTP(S) 代理
     - id: github-permission-gate
       name: dsh-plugin-github/gate
       config:

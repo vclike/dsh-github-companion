@@ -116,7 +116,11 @@ Verify by asking the agent anything about your GitHub account —
 
 Both plugins register settings namespaces rendered by the DSH settings UI:
 
-- `github-tools`: `enableIssueWrites`, `enableGitDataTools`, `enableRepoCreation`
+- `github-tools`: `enableIssueWrites`, `enableGitDataTools`, `enableRepoCreation`,
+  `workspaceRoot` (local root for cloned/checked-out repos; empty = no convention —
+  the agent asks each time; surfaced to the agent via `github_get_me`), and
+  `proxyUrl` (optional HTTP(S) proxy for api.github.com — Node's fetch ignores
+  system proxy settings, so set this explicitly if you need one; applies live)
 - `github-gate`: `mode` (`off|writes|all`), `action` (`ask|deny`), `excludeTools`
 
 Composition defaults come from the cordis.yml insert rows (`base` layer);
@@ -181,6 +185,8 @@ repo pushes, `already_exists` handling, and why public repos are out of scope.
         enableIssueWrites: true          # composition default (settings UI can override)
         enableGitDataTools: false        # composition default (settings UI can override)
         enableRepoCreation: false        # composition default (settings UI can override)
+        workspaceRoot: ''                # local root for cloned repos (empty = ask each time)
+        proxyUrl: ''                     # optional HTTP(S) proxy for api.github.com
     - id: github-permission-gate
       name: dsh-plugin-github/gate
       config:

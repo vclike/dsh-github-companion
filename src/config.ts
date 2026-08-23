@@ -23,6 +23,18 @@ export interface GithubToolsConfig {
   enableGitDataTools: boolean
   /** Composition default for the settings-UI repo-creation switch (user layer can override). */
   enableRepoCreation: boolean
+  /**
+   * Local directory where cloned/checked-out repositories live. Empty means
+   * "no convention" — the agent asks where to put things. Surfaced in
+   * `github_get_me` so recipes can reference it without asking.
+   */
+  workspaceRoot: string
+  /**
+   * Optional HTTP(S) proxy for GitHub API traffic, e.g. `http://127.0.0.1:7890`.
+   * Node's fetch ignores system proxy settings, so users behind a proxy must
+   * set this explicitly.
+   */
+  proxyUrl: string
 }
 
 export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object({
@@ -35,6 +47,8 @@ export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object(
   enableIssueWrites: Schema.boolean().default(true).description('Default for the settings-UI issue-write switch'),
   enableGitDataTools: Schema.boolean().default(false).description('Default for the settings-UI git-data-write switch'),
   enableRepoCreation: Schema.boolean().default(false).description('Default for the settings-UI private-repo-creation switch'),
+  workspaceRoot: Schema.string().default('').description('Local root directory for cloned/checked-out repositories (empty = no convention)'),
+  proxyUrl: Schema.string().default('').description('Optional HTTP(S) proxy for GitHub API traffic (e.g. http://127.0.0.1:7890)'),
 })
 
 /** User-editable subset surfaced in the DSH settings UI under namespace `github-tools`. */
@@ -47,6 +61,10 @@ export interface GithubToolsSection {
    * visibility argument — public repos stay a manual web action.
    */
   enableRepoCreation: boolean
+  /** Local root directory for cloned/checked-out repositories (empty = unset). */
+  workspaceRoot: string
+  /** Optional HTTP(S) proxy for GitHub API traffic (empty = direct). */
+  proxyUrl: string
   /**
    * Inline PAT (write-only in the UI). Empty/absent falls back to the
    * credential reference. Declared WITHOUT a default so the redaction
@@ -59,6 +77,8 @@ export const GithubToolsSectionSchema: Schema<GithubToolsSection> = Schema.objec
   enableIssueWrites: Schema.boolean().default(true).description('Allow issue/comment write tools'),
   enableGitDataTools: Schema.boolean().default(false).description('Allow branch/commit/PR write tools'),
   enableRepoCreation: Schema.boolean().default(false).description('Allow creating new PRIVATE repositories (never public)'),
+  workspaceRoot: Schema.string().default('').description('Local root directory for cloned/checked-out repositories'),
+  proxyUrl: Schema.string().default('').description('Optional HTTP(S) proxy for GitHub API traffic'),
   token: Schema.string().role('secret').description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),
 })
 

@@ -38,6 +38,17 @@ describe('GithubClient', () => {
     vi.useRealTimers()
   })
 
+  it('attaches a proxy dispatcher only when proxyUrl is configured', async () => {
+    const direct = clientWith(() => Promise.resolve(jsonResponse(200, {})))
+    await direct.client.request('/user')
+    expect(direct.calls[0].init && 'dispatcher' in direct.calls[0].init).toBe(false)
+
+    const proxied = clientWith(() => Promise.resolve(jsonResponse(200, {})), { proxyUrl: 'http://127.0.0.1:7890' })
+    await proxied.client.request('/user')
+    // undici resolves in the vitest/node environment; dispatcher must ride along
+    expect(proxied.calls[0].init && Boolean((proxied.calls[0].init as Record<string, unknown>).dispatcher)).toBe(true)
+  })
+
   it('sends bearer auth and API version headers when a token resolves', async () => {
     const { client, calls } = clientWith(() => Promise.resolve(jsonResponse(200, { login: 'octo' })))
     const res = await client.request<{ login?: string }>('/user')
