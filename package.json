@@ -1,0 +1,54 @@
+{
+  "name": "dsh-plugin-github",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin: GitHub REST tools (repos/search/issues/PRs/git-data) with credential-seam token resolution and a companion permission-gate example.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./gate": {
+      "types": "./lib/types/gate.d.ts",
+      "default": "./lib/gate.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "CHANGELOG.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@deepseek-ai/dsh-credentials": ">=0.1.0-rc.5",
+    "@deepseek-ai/dsh-settings": ">=0.1.0-rc.5",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.5",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

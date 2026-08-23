@@ -1,0 +1,102 @@
+# dsh-plugin-github
+
+DeepSeek Harness 插件：为 agent 提供原生 GitHub REST 工具，附一个配套的
+permission-gate 示例插件。
+
+[English](README.md) | 中文
+
+## 你会得到
+
+一个包里的两个 cordis 插件：
+
+| 入口 | 插件名 | 用途 |
+|---|---|---|
+| `dsh-plugin-github` | `github-tools` | 向 `ctx.tools` 注册 GitHub REST 工具 |
+| `dsh-plugin-github/gate` | `github-permission-gate` | 针对 `github_*` 工具的 `tools/pre-execute` 权限门示例 |
+
+### 工具清单（共 18 个，按开关注册）
+
+**只读/发现** — 恒开：
+`github_get_me`、`github_get_repository`、`github_get_file_contents`、
+`github_list_commits`、`github_search_repositories`、`github_search_code`、
+`github_search_issues`、`github_list_issues`、`github_get_issue`
+
+**Issue 写操作** — 可开关（`enableIssueWrites`，默认开）：
+`github_create_issue`、`github_update_issue`、`github_add_issue_comment`
+
+**Git 数据写操作** — 可开关（`enableGitDataTools`，默认**关**）：
+`github_list_pull_requests`、`github_get_pull_request`、`github_create_branch`、
+`github_create_or_update_file`、`github_push_files`、`github_create_pull_request`
+
+规范返回值为 JSON 安全对象，带顶层 `ok` 字段。GitHub 领域错误
+（404/401/403/422…）以 `{ ok: false, status, message }` 返回而非抛出，模型可以
+编程化处理；只有网络故障才表现为工具错误。
+
+## 凭证
+
+配置只保存环境变量**名**（`credentialRef`，默认 `GITHUB_TOKEN`）。实际值通过
+harness 凭证缝（`ctx.credentials`）每次请求前解析——在任意 provider 层设置该
+变量（本地 provider 读取 `~/.dsh/.env` 等 env 层，或在 shell 中 export），
+随时轮换，下一次请求即生效，无需重启。未配置 token 时工具以匿名模式访问公开
+仓库（核心限速 60 次/小时）；`github_get_me` 会如实报告该状态。
+
+token 永不进入子进程环境或日志。
+
+## 设置界面
+
+两个插件各自注册了设置命名空间，会渲染在 DSH 设置界面中：
+
+- `github-tools`：`enableIssueWrites`、`enableGitDataTools`
+- `github-gate`：`mode`（`off|writes|all`）、`action`（`ask|deny`）、`excludeTools`
+
+组合层默认值来自 cordis.yml 插入行（`base` 层）；修改实时生效。
+
+## 安装
+
+```bash
+# 已发布包（bundle 通道 — 重启后生效）
+dsh plugin add dsh-plugin-github
+
+# 本地 checkout
+dsh plugin add D:/path/to/dsh-plugin-github   # 或 github:owner/repo#<sha>
+```
+
+然后设置 token；不需要权限门时，可从 profile 的 `cordis.patch.yml` 删掉
+gate 那一行。
+
+## 配置（cordis.yml 插入行）
+
+```yaml
+- insert:
+    - id: github-tools
+      name: dsh-plugin-github
+      config:
+        credentialRef: GITHUB_TOKEN      # 存放 PAT 的环境变量名
+        apiBaseUrl: https://api.github.com   # GHES: https://host/api/v3
+        requestTimeoutMs: 30000
+        maxRetries: 1                    # 限速响应的重试次数
+        maxPerPage: 30                   # list/search 工具的硬上限
+        maxFileBytes: 262144             # 文件内容截断阈值
+        enableIssueWrites: true          # 组合层默认（设置界面可覆盖）
+        enableGitDataTools: false        # 组合层默认（设置界面可覆盖）
+    - id: github-permission-gate
+      name: dsh-plugin-github/gate
+      config:
+        mode: writes                     # off | writes | all
+        action: ask                      # ask（走审批服务）| deny
+        excludeTools: []                 # 免除门控的精确工具名
+```
+
+## 开发
+
+```bash
+npm install
+npm run typecheck   # tsc --noEmit
+npm test            # vitest（23 个测试）
+npm run build       # 产出 lib/
+node scripts/verify-load.mjs   # 在 `dsh plugin add` 后于 profile 目录内运行
+```
+
+## 许可
+
+MIT

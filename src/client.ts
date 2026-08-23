@@ -1,0 +1,173 @@
+/**
+ * GitHub REST API client — pure transport layer, no Cordis imports.
+ *
+ * Domain outcomes (404 not found, 422 validation, 401 bad credentials, …)
+ * are RETURNED as `{ status, ok: false, data }` so tools can represent them
+ * as canonical values. Only infrastructure failures (network errors,
+ * timeouts, aborts) THROW — the tool registry turns those into isError
+ * results, which is the contract split recommended by the DSH tool guide.
+ *
+ * The token is resolved fresh for every request through `options.getToken`
+ * (per-operation resolution — a rotated credential reaches the next request
+ * without a restart), and never appears in thrown error messages.
+ */
+
+export interface GithubClientOptions {
+  /** REST root, e.g. `https://api.github.com` or a GHES `https://host/api/v3`. */
+  apiBaseUrl: string
+  /** Per-request deadline in milliseconds. */
+  requestTimeoutMs: number
+  /** Extra attempts after the first try for retryable rate-limit responses. */
+  maxRetries: number
+  /**
+   * Resolve the PAT for one request. Returns `undefined` for anonymous mode
+   * (public data only, 60 req/h core limit).
+   */
+  getToken: () => Promise<string | undefined>
+}
+
+export interface GithubRequestInit {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  /** JSON-serializable request body; sent as `application/json`. */
+  body?: unknown
+  /** Caller-owned cancellation signal (the tool's `exec.signal`). */
+  signal?: AbortSignal
+  /** Extra headers (rare; auth/Accept are managed here). */
+  headers?: Record<string, string>
+  /** Query parameters; `undefined` values are omitted. */
+  query?: Record<string, string | number | undefined>
+}
+
+export interface GithubResponse<T> {
+  status: number
+  ok: boolean
+  data: T
+}
+
+/** Network-level failure (DNS, connect, timeout, abort). Never carries secrets. */
+export class GithubNetworkError extends Error {
+  override readonly cause?: unknown
+  constructor(message: string, cause?: unknown) {
+    super(message)
+    this.name = 'GithubNetworkError'
+    this.cause = cause
+  }
+}
+
+interface ApiErrorBody {
+  message?: string
+  documentation_url?: string
+}
+
+/** Sleep that wakes early on abort; resolves (does not throw) on cancel. */
+function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  if (signal?.aborted) return Promise.resolve()
+  return new Promise(resolve => {
+    const timer = setTimeout(done, ms)
+    function done() {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', done)
+      resolve()
+    }
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
+
+/** True when the response is a rate-limit rejection worth retrying once. */
+function isRateLimited(status: number, headers: Headers): boolean {
+  if (status === 429) return true
+  if (status !== 403) return false
+  if (headers.get('retry-after')) return true
+  return headers.get('x-ratelimit-remaining') === '0'
+}
+
+function retryDelayMs(headers: Headers, attempt: number): number {
+  const retryAfter = Number(headers.get('retry-after'))
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(retryAfter * 1000, 10_000)
+  return Math.min(1000 * 2 ** attempt, 8_000)
+}
+
+export class GithubClient {
+  private readonly options: GithubClientOptions
+  private readonly fetchImpl: typeof fetch
+
+  constructor(options: GithubClientOptions, fetchImpl: typeof fetch = fetch) {
+    this.options = options
+    this.fetchImpl = fetchImpl.bind(globalThis)
+  }
+
+  /** Absolute URL for a repo-relative API path (`/repos/…`, `/search/…`, `/user`). */
+  url(path: string, query?: Record<string, string | number | undefined>): string {
+    const base = this.options.apiBaseUrl.replace(/\/+$/, '')
+    const url = new URL(path.replace(/^\/+/, ''), `${base}/`)
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value !== undefined) url.searchParams.set(key, String(value))
+    }
+    return url.toString()
+  }
+
+  /**
+   * Perform one REST call with auth, timeout, JSON encoding, and one
+   * rate-limit retry. Domain statuses (including 4xx/5xx) resolve normally.
+   */
+  async request<T = unknown>(path: string, init: GithubRequestInit = {}): Promise<GithubResponse<T>> {
+    const token = await this.options.getToken()
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'dsh-plugin-github',
+      ...init.headers,
+    }
+    if (token) headers.Authorization = `Bearer ${token}`
+    if (init.body !== undefined) headers['Content-Type'] = 'application/json'
+
+    const attempts = Math.max(1, this.options.maxRetries + 1)
+    for (let attempt = 0; ; attempt++) {
+      const timeoutSignal = AbortSignal.timeout(this.options.requestTimeoutMs)
+      const composed =
+        init.signal && typeof (AbortSignal as { any?: unknown }).any === 'function'
+          ? AbortSignal.any([init.signal, timeoutSignal])
+          : timeoutSignal
+      let response: Response
+      try {
+        response = await this.fetchImpl(this.url(path, init.query), {
+          method: init.method ?? 'GET',
+          headers,
+          body: init.body === undefined ? undefined : JSON.stringify(init.body),
+          signal: composed,
+        })
+      } catch (cause) {
+        if (init.signal?.aborted) throw new GithubNetworkError('GitHub request aborted', cause)
+        throw new GithubNetworkError(
+          `GitHub request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+          cause,
+        )
+      }
+      if (response.status === 204) return { status: 204, ok: true, data: undefined as T }
+
+      const data = (await response.json().catch(() => ({}))) as T & ApiErrorBody
+      if (response.ok) return { status: response.status, ok: true, data }
+
+      if (attempt + 1 < attempts && isRateLimited(response.status, response.headers)) {
+        await sleep(retryDelayMs(response.headers, attempt), init.signal)
+        if (init.signal?.aborted) throw new GithubNetworkError('GitHub request aborted while backing off')
+        continue
+      }
+      return {
+        status: response.status,
+        ok: false,
+        data: (
+          ok(data)
+            ? data
+            : {
+                message: `GitHub API returned ${response.status}`,
+              }
+        ) as T,
+      }
+    }
+
+    function ok(value: unknown): value is { message: string } {
+      return typeof value === 'object' && value !== null && typeof (value as ApiErrorBody).message === 'string'
+    }
+  }
+}

@@ -1,0 +1,106 @@
+# dsh-plugin-github
+
+DeepSeek Harness plugin: native GitHub REST tools for agents, plus a companion
+permission-gate example plugin.
+
+English | [中文](README.zh.md)
+
+## What you get
+
+Two cordis plugins in one package:
+
+| Entry | Plugin name | Purpose |
+|---|---|---|
+| `dsh-plugin-github` | `github-tools` | Registers GitHub REST tools on `ctx.tools` |
+| `dsh-plugin-github/gate` | `github-permission-gate` | Example `tools/pre-execute` permission gate scoped to `github_*` tools |
+
+### Tools (18 total, registered per switches)
+
+**Read / discovery** — always on:
+`github_get_me`, `github_get_repository`, `github_get_file_contents`,
+`github_list_commits`, `github_search_repositories`, `github_search_code`,
+`github_search_issues`, `github_list_issues`, `github_get_issue`
+
+**Issue writes** — switchable (`enableIssueWrites`, default on):
+`github_create_issue`, `github_update_issue`, `github_add_issue_comment`
+
+**Git data writes** — switchable (`enableGitDataTools`, default **off**):
+`github_list_pull_requests`, `github_get_pull_request`, `github_create_branch`,
+`github_create_or_update_file`, `github_push_files`, `github_create_pull_request`
+
+Canonical results are JSON-safe objects with a top-level `ok` field. GitHub
+domain failures (404/401/403/422…) return `{ ok: false, status, message }`
+instead of throwing, so the model can react programmatically; only network
+failures surface as tool errors.
+
+## Credentials
+
+Config carries only the env-var **name** (`credentialRef`, default
+`GITHUB_TOKEN`). The value is resolved through the harness credential seam
+(`ctx.credentials`) once per request — set the variable in any provider layer
+(`~/.dsh/.env` is read by the local provider's env layers, or export it in the
+shell), rotate it any time, and the next request picks it up without a
+restart. Without a token the tools work anonymously against public repos
+(60 req/h core limit); `github_get_me` reports that state.
+
+The token never reaches subprocesses or logs.
+
+## Settings UI
+
+Both plugins register settings namespaces rendered by the DSH settings UI:
+
+- `github-tools`: `enableIssueWrites`, `enableGitDataTools`
+- `github-gate`: `mode` (`off|writes|all`), `action` (`ask|deny`), `excludeTools`
+
+Composition defaults come from the cordis.yml insert rows (`base` layer);
+changes apply live.
+
+## Install
+
+```bash
+# published package (bundle channel — takes effect on restart)
+dsh plugin add dsh-plugin-github
+
+# local checkout
+dsh plugin add D:/path/to/dsh-plugin-github   # or github:owner/repo#<sha>
+```
+
+Then set your token and (optionally) trim the gate row from your profile's
+`cordis.patch.yml` if you don't want the permission gate loaded.
+
+## Configuration (cordis.yml insert row)
+
+```yaml
+- insert:
+    - id: github-tools
+      name: dsh-plugin-github
+      config:
+        credentialRef: GITHUB_TOKEN      # env-var NAME holding the PAT
+        apiBaseUrl: https://api.github.com   # GHES: https://host/api/v3
+        requestTimeoutMs: 30000
+        maxRetries: 1                    # retries for rate-limited responses
+        maxPerPage: 30                   # hard cap for list/search tools
+        maxFileBytes: 262144             # file-content truncation threshold
+        enableIssueWrites: true          # composition default (settings UI can override)
+        enableGitDataTools: false        # composition default (settings UI can override)
+    - id: github-permission-gate
+      name: dsh-plugin-github/gate
+      config:
+        mode: writes                     # off | writes | all
+        action: ask                      # ask (approval service) | deny
+        excludeTools: []                 # exact tool names exempt from gating
+```
+
+## Development
+
+```bash
+npm install
+npm run typecheck   # tsc --noEmit
+npm test            # vitest (23 tests)
+npm run build       # emit lib/
+node scripts/verify-load.mjs   # run inside a profile dir after `dsh plugin add`
+```
+
+## License
+
+MIT

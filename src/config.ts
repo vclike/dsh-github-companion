@@ -1,0 +1,75 @@
+import Schema from '@deepseek-ai/schemastery'
+
+/**
+ * Composition-layer (cordis.yml) configuration for the github-tools plugin.
+ * Every field here is tunable from the insert row's `config:` — the hard rule
+ * is "no hardcoded tunables": if it can be changed, it must be changeable
+ * from cordis.yml.
+ */
+export interface GithubToolsConfig {
+  /** Env-var NAME holding the PAT (resolved via ctx.credentials each operation). */
+  credentialRef: string
+  /** REST root; swap for GHES (`https://<host>/api/v3`). */
+  apiBaseUrl: string
+  requestTimeoutMs: number
+  maxRetries: number
+  /** Hard cap applied to every list/search tool's per_page argument. */
+  maxPerPage: number
+  /** File contents larger than this are truncated in the canonical value. */
+  maxFileBytes: number
+  /** Composition default for the settings-UI switch (user layer can override). */
+  enableIssueWrites: boolean
+  /** Composition default for the settings-UI switch (user layer can override). */
+  enableGitDataTools: boolean
+}
+
+export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object({
+  credentialRef: Schema.string().default('GITHUB_TOKEN').description('Environment-variable name that holds the GitHub PAT'),
+  apiBaseUrl: Schema.string().default('https://api.github.com').description('GitHub REST API root (GHES: https://host/api/v3)'),
+  requestTimeoutMs: Schema.number().default(30_000).min(1_000).max(300_000).description('Per-request timeout in ms'),
+  maxRetries: Schema.number().default(1).min(0).max(3).description('Retries for rate-limited responses'),
+  maxPerPage: Schema.number().default(30).min(1).max(100).description('Upper bound for per_page on list/search tools'),
+  maxFileBytes: Schema.number().default(262_144).min(1_024).max(4_194_304).description('Truncate file contents beyond this many bytes'),
+  enableIssueWrites: Schema.boolean().default(true).description('Default for the settings-UI issue-write switch'),
+  enableGitDataTools: Schema.boolean().default(false).description('Default for the settings-UI git-data-write switch'),
+})
+
+/** User-editable subset surfaced in the DSH settings UI under namespace `github-tools`. */
+export interface GithubToolsSection {
+  enableIssueWrites: boolean
+  enableGitDataTools: boolean
+}
+
+export const GithubToolsSectionSchema: Schema<GithubToolsSection> = Schema.object({
+  enableIssueWrites: Schema.boolean().default(true).description('Allow issue/comment write tools'),
+  enableGitDataTools: Schema.boolean().default(false).description('Allow branch/commit/PR write tools'),
+})
+
+/** Composition-layer configuration for the permission-gate plugin. */
+export interface GithubGateConfig {
+  /** Which github_* calls the gate inspects. */
+  mode: 'off' | 'writes' | 'all'
+  /** What happens to an inspected call. */
+  action: 'ask' | 'deny'
+  /** Tool names exempt from gating (exact match). */
+  excludeTools: string[]
+}
+
+export const GithubGateConfigSchema: Schema<GithubGateConfig> = Schema.object({
+  mode: Schema.union<'off' | 'writes' | 'all'>(['off', 'writes', 'all']).default('writes').description('Gate scope: off / writes only / all github tools'),
+  action: Schema.union<'ask' | 'deny'>(['ask', 'deny']).default('ask').description('Decision for gated calls: ask via approval service, or deny outright'),
+  excludeTools: Schema.array(String).role('table').default([]).description('github_* tool names exempted from the gate'),
+})
+
+/** User-editable subset surfaced in the DSH settings UI under namespace `github-gate`. */
+export interface GithubGateSection {
+  mode: 'off' | 'writes' | 'all'
+  action: 'ask' | 'deny'
+  excludeTools: string[]
+}
+
+export const GithubGateSectionSchema: Schema<GithubGateSection> = Schema.object({
+  mode: Schema.union<'off' | 'writes' | 'all'>(['off', 'writes', 'all']).default('writes').description('Gate scope: off / writes only / all github tools'),
+  action: Schema.union<'ask' | 'deny'>(['ask', 'deny']).default('ask').description('Decision for gated calls'),
+  excludeTools: Schema.array(String).default([]).description('Exempted tool names'),
+})
