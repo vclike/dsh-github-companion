@@ -97,6 +97,20 @@ dsh plugin add D:/path/to/dsh-plugin-github   # or github:owner/repo#<sha>
 Then set your token and (optionally) trim the gate row from your profile's
 `cordis.patch.yml` if you don't want the permission gate loaded.
 
+### Companion usage skill (recommended)
+
+`dsh-github-guide/` in this repository is a mini bundle that registers an
+on-demand agent skill, `dsh-github-usage` — a capability map, result
+conventions, token prerequisites, workflow recipes (upload project → private
+repo), and a failure playbook. Install it alongside:
+
+```bash
+dsh plugin add D:/path/to/dsh-plugin-github/dsh-github-guide
+```
+
+Agents that have it loaded stop guessing about anonymous rate limits, empty
+repo pushes, `already_exists` handling, and why public repos are out of scope.
+
 ## Configuration (cordis.yml insert row)
 
 ```yaml

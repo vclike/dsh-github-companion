@@ -87,6 +87,18 @@ dsh plugin add D:/path/to/dsh-plugin-github   # 或 github:owner/repo#<sha>
 然后设置 token；不需要权限门时，可从 profile 的 `cordis.patch.yml` 删掉
 gate 那一行。
 
+### 配套使用技能（推荐）
+
+仓库内的 `dsh-github-guide/` 是一个迷你 bundle，注册按需加载的 agent 技能
+`dsh-github-usage`——能力开关地图、结果约定、令牌权限速查、工作流配方
+（上传项目→私仓）与故障手册。建议一并安装：
+
+```bash
+dsh plugin add D:/path/to/dsh-plugin-github/dsh-github-guide
+```
+
+装了它的 agent 不会再对匿名限速、空仓推送、重名处理、公开仓边界反复试错。
+
 ## 配置（cordis.yml 插入行）
 
 ```yaml
