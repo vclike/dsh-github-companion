@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 (2026-08-23)
+
+Release tooling + digest/release recipes.
+
+- New read tools (always on): `github_list_releases`, `github_latest_release`.
+- New write tool: `github_create_release` — auto-creates the tag from
+  `target_commitish` when missing; structured `tag_already_exists` code.
+  Sits under the Git-data switch and the permission gate like other writes.
+- Duplicate detection hardened: GitHub signals duplicates via
+  `errors[].code = 'already_exists'` (underscored) — both release and
+  repository creation now honor that shape.
+- Usage skill (`dsh-github-usage`): new recipes E (multi-repo weekly digest)
+  and F (one-sentence release pipeline).
+- CI hardening from first real runs: workflow-level env gate for optional npm
+  publish (`secrets` is not usable in step-level `if`), actions v5.
+
 ## 0.1.0 (2026-08-23)
 
 Initial release.

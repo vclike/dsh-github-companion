@@ -1,6 +1,6 @@
 {
   "name": "dsh-github-guide",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Companion usage skill for dsh-plugin-github: capability tiers, result conventions, token prerequisites, workflow recipes, and failure playbook for agents.",
   "license": "MIT",
   "type": "module",

@@ -38,6 +38,18 @@ export interface PullRequestItem {
   merged_at?: string | null
 }
 
+export interface ReleaseItem {
+  id?: number
+  tag_name?: string
+  name?: string | null
+  draft?: boolean
+  prerelease?: boolean
+  created_at?: string
+  published_at?: string
+  html_url?: string
+  body?: string | null
+}
+
 export interface ContentItem {
   name?: string
   path?: string
@@ -224,6 +236,36 @@ export class GithubApi {
       body: { ...body, private: true },
       signal,
     })
+  }
+
+  listReleases(owner: string, repo: string, perPage?: number, signal?: AbortSignal): Promise<GithubResponse<ReleaseItem[]>> {
+    const query = perPage ? `?per_page=${Math.min(Math.max(perPage, 1), 100)}` : ''
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases${query}`, { signal })
+  }
+
+  latestRelease(owner: string, repo: string, signal?: AbortSignal): Promise<GithubResponse<ReleaseItem>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases/latest`, { signal })
+  }
+
+  /**
+   * Create a release. GitHub creates the tag automatically from
+   * `target_commitish` (defaults to the default branch) when `tag_name` does
+   * not exist yet — one call covers tag + release.
+   */
+  createRelease(
+    owner: string,
+    repo: string,
+    body: {
+      tag_name: string
+      target_commitish?: string
+      name?: string
+      body?: string
+      prerelease?: boolean
+      make_latest?: 'true' | 'false' | 'legacy'
+    },
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<ReleaseItem>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/releases`, { method: 'POST', body, signal })
   }
 
   /** Resolve the commit SHA a branch (`heads/x`) or tag points at. */

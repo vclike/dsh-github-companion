@@ -14,19 +14,21 @@ permission-gate 示例插件。
 | `dsh-plugin-github` | `github-tools` | 向 `ctx.tools` 注册 GitHub REST 工具 |
 | `dsh-plugin-github/gate` | `github-permission-gate` | 针对 `github_*` 工具的 `tools/pre-execute` 权限门示例 |
 
-### 工具清单（共 19 个，按开关注册）
+### 工具清单（共 21 个，按开关注册）
 
 **只读/发现** — 恒开：
 `github_get_me`、`github_get_repository`、`github_get_file_contents`、
 `github_list_commits`、`github_search_repositories`、`github_search_code`、
-`github_search_issues`、`github_list_issues`、`github_get_issue`
+`github_search_issues`、`github_list_issues`、`github_get_issue`、
+`github_list_releases`、`github_latest_release`
 
 **Issue 写操作** — 可开关（`enableIssueWrites`，默认开）：
 `github_create_issue`、`github_update_issue`、`github_add_issue_comment`
 
 **Git 数据写操作** — 可开关（`enableGitDataTools`，默认**关**）：
 `github_list_pull_requests`、`github_get_pull_request`、`github_create_branch`、
-`github_create_or_update_file`、`github_push_files`、`github_create_pull_request`
+`github_create_or_update_file`、`github_push_files`、`github_create_pull_request`、
+`github_create_release`
 
 **仓库自动创建** — 可开关（`enableRepoCreation`，默认**关**）：
 `github_create_repository` —— 一律创建**私有**仓库（工具不提供公开选项，公开

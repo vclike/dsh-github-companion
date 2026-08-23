@@ -17,19 +17,21 @@ Two cordis plugins in one package:
 | `dsh-plugin-github` | `github-tools` | Registers GitHub REST tools on `ctx.tools` |
 | `dsh-plugin-github/gate` | `github-permission-gate` | Example `tools/pre-execute` permission gate scoped to `github_*` tools |
 
-### Tools (19 total, registered per switches)
+### Tools (21 total, registered per switches)
 
 **Read / discovery** — always on:
 `github_get_me`, `github_get_repository`, `github_get_file_contents`,
 `github_list_commits`, `github_search_repositories`, `github_search_code`,
-`github_search_issues`, `github_list_issues`, `github_get_issue`
+`github_search_issues`, `github_list_issues`, `github_get_issue`,
+`github_list_releases`, `github_latest_release`
 
 **Issue writes** — switchable (`enableIssueWrites`, default on):
 `github_create_issue`, `github_update_issue`, `github_add_issue_comment`
 
 **Git data writes** — switchable (`enableGitDataTools`, default **off**):
 `github_list_pull_requests`, `github_get_pull_request`, `github_create_branch`,
-`github_create_or_update_file`, `github_push_files`, `github_create_pull_request`
+`github_create_or_update_file`, `github_push_files`, `github_create_pull_request`,
+`github_create_release`
 
 **Repo creation** — switchable (`enableRepoCreation`, default **off**):
 `github_create_repository` — always creates a **private** repository (no

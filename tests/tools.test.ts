@@ -218,4 +218,77 @@ describe('tool execute contracts', () => {
     await toolByName(tools, 'github_list_commits').execute({ owner: 'o', repo: 'r', per_page: -3 }, EXEC)
     expect(requested).toBe('1')
   })
+
+  it('release read tools are always on and shape canonical values', async () => {
+    const { api } = makeApi({
+      '/repos/o/r/releases/latest': { id: 7, tag_name: 'v1.2.0', name: 'v1.2.0', html_url: 'u' },
+      '/repos/o/r/releases': [{ id: 7, tag_name: 'v1.2.0' }, { id: 6, tag_name: 'v1.1.0', draft: true }],
+    })
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false })
+    const names = tools.map(t => t.name)
+    expect(names).toContain('github_list_releases')
+    expect(names).toContain('github_latest_release')
+    expect(names).not.toContain('github_create_release')
+
+    const latest = (await toolByName(tools, 'github_latest_release').execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(latest).toMatchObject({ ok: true, tag_name: 'v1.2.0', html_url: 'u' })
+
+    const listed = (await toolByName(tools, 'github_list_releases').execute({ owner: 'o', repo: 'r' }, EXEC)) as { count: number; releases: Array<Record<string, unknown>> }
+    expect(listed.count).toBe(2)
+    expect(listed.releases[1]).toMatchObject({ tag_name: 'v1.1.0', draft: true })
+  })
+
+  it('github_create_release posts the tag and projects the release url', async () => {
+    let posted: Record<string, unknown> | undefined
+    const fetchImpl = (url: string | URL, init?: RequestInit): Promise<Response> => {
+      expect(new URL(String(url)).pathname).toBe('/repos/o/r/releases')
+      posted = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return Promise.resolve(jsonResponse(201, { id: 9, tag_name: 'v2.0.0', name: 'v2.0.0', html_url: 'rel-url', prerelease: false }))
+    }
+    const client = new GithubClient({ ...CONFIG, getToken: async () => 't' }, fetchImpl as unknown as typeof fetch)
+    const api = new GithubApi(client)
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: true })
+    expect(tools.map(t => t.name)).toContain('github_create_release')
+
+    const result = (await toolByName(tools, 'github_create_release').execute(
+      { owner: 'o', repo: 'r', tag_name: ' v2.0.0 ', name: 'v2.0.0', body: 'notes' },
+      EXEC,
+    )) as Record<string, unknown>
+    expect(posted).toEqual({ tag_name: 'v2.0.0', name: 'v2.0.0', body: 'notes' })
+    expect(result).toMatchObject({ ok: true, tag_name: 'v2.0.0', html_url: 'rel-url' })
+  })
+
+  it('github_create_release rejects empty tag_name before any request and maps already-exists', async () => {
+    const { api, calls } = makeApi({})
+    const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: true })
+
+    const bad = await toolByName(tools, 'github_create_release').execute({ owner: 'o', repo: 'r', tag_name: '   ' }, EXEC)
+    expect(bad).toMatchObject({ ok: false, status: 400 })
+    expect(calls).toHaveLength(0)
+
+    const conflictApi = makeApi({
+      '/repos/o/r/releases': {
+        message: 'Validation Failed',
+        errors: [{ resource: 'Release', code: 'already_exists', field: 'tag_name' }],
+      },
+    })
+    // route-based fake always answers 200; use a direct 422 stub instead
+    const client422 = new GithubClient(
+      { ...CONFIG, getToken: async () => 't' },
+      (() =>
+        Promise.resolve(
+          jsonResponse(422, {
+            message: 'Validation Failed',
+            errors: [{ resource: 'Release', code: 'already_exists', field: 'tag_name' }],
+          }),
+        )) as unknown as typeof fetch,
+    )
+    const tools422 = buildGithubTools(new GithubApi(client422), CONFIG, { enableIssueWrites: false, enableGitDataTools: true })
+    void conflictApi
+    const conflict = (await toolByName(tools422, 'github_create_release').execute(
+      { owner: 'o', repo: 'r', tag_name: 'v1.0.0' },
+      EXEC,
+    )) as Record<string, unknown>
+    expect(conflict).toMatchObject({ ok: false, status: 422, code: 'tag_already_exists' })
+  })
 })

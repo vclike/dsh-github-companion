@@ -16,7 +16,7 @@
 
 import { defineTool, type JsonValue, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 
-import type { GithubApi, IssueItem, PullRequestItem } from './api.ts'
+import type { GithubApi, IssueItem, PullRequestItem, ReleaseItem } from './api.ts'
 import type { GithubToolsConfig } from './config.ts'
 
 /** One canonical tool-result object: JSON-safe keys only. */
@@ -131,6 +131,7 @@ export const GITHUB_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'github_create_or_update_file',
   'github_push_files',
   'github_create_pull_request',
+  'github_create_release',
 ])
 
 // ---------------------------------------------------------------------------
@@ -522,9 +523,16 @@ function createRepositoryTool(api: GithubApi): ToolDefinition {
         exec.signal,
       )
       if (!response.ok) {
-        const data = response.data as { message?: string; errors?: Array<{ message?: string }> }
+        const data = response.data as {
+          message?: string
+          errors?: Array<{ message?: string; code?: string }>
+        }
         const blob = [data.message, ...(data.errors ?? []).map(e => e.message)].filter(Boolean).join(' ')
-        const alreadyExists = response.status === 422 && /already exist/i.test(blob)
+        // GitHub signals duplicates via errors[].code = 'already_exists'
+        // (underscored), not via the human-readable message.
+        const alreadyExists =
+          response.status === 422 &&
+          (/already.?exists/i.test(blob) || (data.errors ?? []).some(e => e.code === 'already_exists'))
         return {
           ok: false,
           status: response.status,
@@ -767,6 +775,128 @@ function clampPerPage(value: number | undefined, config: GithubToolsConfig): num
 }
 
 /** All tool factories grouped by phase for registration-time gating. */
+function shapeRelease(data: unknown): Value {
+  const d = data as ReleaseItem
+  return {
+    id: num(d.id),
+    tag_name: str(d.tag_name),
+    name: d.name ?? null,
+    draft: d.draft === true,
+    prerelease: d.prerelease === true,
+    created_at: str(d.created_at),
+    published_at: str(d.published_at),
+    html_url: str(d.html_url),
+    body: d.body ?? null,
+  }
+}
+
+function listReleasesTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_releases',
+    description:
+      'List releases of a repository, newest first. Use for release tracking / weekly digests; for just the newest one prefer github_latest_release.',
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner (user or org)' },
+      repo: { type: 'string', required: true },
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 10)}` },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listReleases(String(args.owner), String(args.repo), num(args.per_page) ?? undefined, exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      const releases = Array.isArray(response.data) ? response.data : []
+      return {
+        ok: true,
+        count: releases.length,
+        releases: releases.map(shapeRelease),
+      }
+    },
+  })
+}
+
+function latestReleaseTool(api: GithubApi): ToolDefinition {
+  return defineTool({
+    name: 'github_latest_release',
+    description:
+      'Get the latest published release of a repository. 404 means the repository has no releases yet.',
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner (user or org)' },
+      repo: { type: 'string', required: true },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.latestRelease(String(args.owner), String(args.repo), exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      return { ok: true, ...shapeRelease(response.data) }
+    },
+  })
+}
+
+function createReleaseTool(api: GithubApi): ToolDefinition {
+  return defineTool({
+    name: 'github_create_release',
+    description:
+      "Create a release. When the tag does not exist yet GitHub creates it automatically from target_commitish (defaults to the repository's default branch), so one call covers tag + release. Drafts and prereleases supported.",
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner (user or org)' },
+      repo: { type: 'string', required: true },
+      tag_name: { type: 'string', required: true, description: "Tag name, e.g. v1.0.0 — created automatically when missing" },
+      target_commitish: {
+        type: 'string',
+        description: 'Branch name or commit SHA to tag; defaults to the default branch. Ignored when the tag already exists',
+      },
+      name: { type: 'string', description: 'Release title; defaults to tag_name' },
+      body: { type: 'string', description: 'Release notes (markdown)' },
+      prerelease: { type: 'boolean', description: 'Mark as prerelease; default false' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const tagName = typeof args.tag_name === 'string' ? args.tag_name.trim() : ''
+      if (!tagName) return { ok: false, status: 400, message: "tag_name is required (e.g. 'v1.0.0')." }
+      const response = await api.createRelease(
+        String(args.owner),
+        String(args.repo),
+        {
+          tag_name: tagName,
+          ...(typeof args.target_commitish === 'string' && args.target_commitish.trim()
+            ? { target_commitish: args.target_commitish.trim() }
+            : {}),
+          ...(typeof args.name === 'string' && args.name.trim() ? { name: args.name.trim() } : {}),
+          ...(typeof args.body === 'string' ? { body: args.body } : {}),
+          ...(args.prerelease === true ? { prerelease: true } : {}),
+        },
+        exec.signal,
+      )
+      if (!response.ok) {
+        const data = response.data as {
+          message?: string
+          errors?: Array<{ message?: string; code?: string }>
+        }
+        const blob = [data.message, ...(data.errors ?? []).map(e => e.message)].filter(Boolean).join(' ')
+        // GitHub signals duplicates via errors[].code = 'already_exists'
+        // (underscored), not via the human-readable message.
+        const alreadyExists =
+          response.status === 422 &&
+          (/already.?exists/i.test(blob) || (data.errors ?? []).some(e => e.code === 'already_exists'))
+        return {
+          ok: false,
+          status: response.status,
+          ...(alreadyExists ? { code: 'tag_already_exists' } : {}),
+          message: alreadyExists
+            ? `Tag '${tagName}' already exists — use a new version or fetch github_list_releases to inspect it.`
+            : blob || 'release creation failed',
+        }
+      }
+      const shaped = shapeRelease(response.data)
+      return {
+        ok: true,
+        ...shaped,
+        note: 'Tag created automatically with this release if it did not exist before.',
+      }
+    },
+  })
+}
+
 export function buildGithubTools(
   api: GithubApi,
   config: GithubToolsConfig,
@@ -782,6 +912,8 @@ export function buildGithubTools(
     searchIssuesTool(api, config),
     listIssuesTool(api, config),
     getIssueTool(api),
+    listReleasesTool(api, config),
+    latestReleaseTool(api),
   ]
   if (section.enableIssueWrites) {
     tools.push(createIssueTool(api), updateIssueTool(api), addIssueCommentTool(api))
@@ -797,6 +929,7 @@ export function buildGithubTools(
       createOrUpdateFileTool(api),
       pushFilesTool(api),
       createPullRequestTool(api),
+      createReleaseTool(api),
     )
   }
   return tools

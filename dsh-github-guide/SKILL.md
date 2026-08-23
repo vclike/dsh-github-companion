@@ -17,9 +17,9 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 
 | 层 | 工具 | 注册条件 | 备注 |
 |---|---|---|---|
-| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue | 总是 | 无审批 |
+| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue / **list_releases** / **latest_release** | 总是 | 无审批 |
 | Issue 写 | create_issue / update_issue / add_issue_comment | 开关默认开 | 每次弹审批 |
-| Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request | 开关默认关 | 每次弹审批 |
+| Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request, **create_release** | 开关默认关 | 每次弹审批 |
 | 建仓 | create_repository | 开关默认关 | 强制私有 |
 
 工具没出现在会话里 = 对应开关没开。引导用户到 设置 → GitHub 区块打开，而不是硬猜。
@@ -72,6 +72,28 @@ create/update/comment。写操作每条都会弹审批，量大时先跟用户�
 
 search_repositories / search_code / get_file_contents 组合即可读完一个公开项目的
 README、目录与关键源码。匿名可做但限速紧；有令牌体验好得多。
+
+### E. 开源追踪周报（多仓库情报汇总）
+
+对用户报出的每个 `owner/repo`（或用户说"我的 watchlist"时请其列出）：
+
+1. `github_latest_release` —— 有新 release 则记录版本号与日期；404 表示尚无发布
+2. `github_list_issues`（默认 open）—— 挑出互动多（评论多）或标题与用户兴趣相关的
+3. 可选：`github_list_commits` 看最近一周活跃度
+4. 按"每仓库一小节：最新版本 / 值得关注的 issue / 活跃度"输出汇总，最后给一句
+   总体建议
+
+注意：仓库多且未配置令牌时会撞 60 次/小时匿名限速——先探测凭证，超量时主动分批。
+
+### F. 一句话发版（本地项目 → GitHub Release）
+
+1. 和用户确认版本号（如 v1.3.0）；若项目有 package.json/版本文件，先用本地编辑把
+   版本号改好
+2. `github_push_files` 把全部改动（含版本文件）作为单个提交推到 main
+3. `github_create_release { tag_name: 'v1.3.0', name, body: <变更说明> }` —— tag 不
+   存在时会自动创建，一步完成打标+发版；返回的 html_url 汇报给用户
+4. 收到 `tag_already_exists` 时**不要覆盖**：问用户是换下一个版本号还是基于已有
+   tag 补说明
 
 ## 5. 硬边界（不要尝试）
 
