@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.1 (2026-08-23)
+
+Settings-card polish + workspace probe.
+
+- `github_get_me` now probes the configured `workspaceRoot` on the local
+  filesystem and reports `workspace: { exists, projects[] }` (dot-folders
+  skipped, capped at 50 entries) — the agent can answer "what's in my
+  workspace" without new tools.
+- Settings card: workspace-root row shows a 已设置/未设置 badge.
+- Fixed: token row layout jumped when the 清除 button appeared after saving
+  (space-between redistribution); input+button rows now use a stable
+  flex-start layout.
+
 ## 0.4.0 (2026-08-23)
 
 Workspace convention + proxy support.

@@ -33,6 +33,9 @@ window.__ModuleLoader__.load({
 				'.dsh-gh-title{margin:0 0 6px;font-size:14px;font-weight:600;line-height:1.4}',
 				'.dsh-gh-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;min-height:34px}',
 				'.dsh-gh-row.stack{flex-direction:column;align-items:stretch;gap:8px}',
+				'.dsh-gh-inputrow{display:flex;align-items:flex-start;gap:8px;min-height:30px}',
+				'.dsh-gh-inputrow .dsh-gh-input{flex:1 1 auto}',
+				'.dsh-gh-inputrow .dsh-gh-btn{flex:0 0 auto}',
 				'.dsh-gh-labels{display:flex;flex-direction:column;min-width:0}',
 				'.dsh-gh-hint{font-size:11px;opacity:.62;line-height:1.45;margin-top:1px}',
 				'.dsh-gh-hint a{color:#4c8dff;text-decoration:none}.dsh-gh-hint a:hover{text-decoration:underline}',
@@ -125,7 +128,7 @@ window.__ModuleLoader__.load({
 							h('span', { className: 'dsh-gh-hint' },
 								'保存后立即生效，优先于 GITHUB_TOKEN 环境变量；令牌只写入服务端配置文件，界面不回显。'),
 						),
-					h('div', { className: 'dsh-gh-row', style: { padding: 0, gap: 8 } },
+					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
 							className: 'dsh-gh-input', type: 'password', spellCheck: false,
 							placeholder: configured ? '••••••••（输入新值可覆盖）' : '粘贴 PAT（生成后粘贴到这里）',
@@ -162,7 +165,7 @@ window.__ModuleLoader__.load({
 						h('span', null, '豁免工具（精确名，逗号分隔）'),
 						h('span', { className: 'dsh-gh-hint' }, '例如：github_search_issues, github_get_me'),
 					),
-					h('div', { className: 'dsh-gh-row', style: { padding: 0, gap: 8 } },
+					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
 							className: 'dsh-gh-input', spellCheck: false, value: text, disabled: busy,
 							onChange: e => setDraft(e.target.value),
@@ -178,16 +181,17 @@ window.__ModuleLoader__.load({
 			}
 
 			/** Single-line text setting; saves on button press (draft === null = clean). */
-			function TextRow({ label, hint, placeholder, field, value, busy, onWrite }) {
+			function TextRow({ label, hint, placeholder, field, value, badge, busy, onWrite }) {
 				const current = typeof value === 'string' ? value : ''
 				const [draft, setDraft] = useState(null)
 				const text = draft === null ? current : draft
 				const dirty = draft !== null && draft.trim() !== current
 				return h('div', { className: 'dsh-gh-row stack' },
 					h('div', { className: 'dsh-gh-labels' },
-						h('span', null, label),
+						h('span', null, label,
+							badge ? h('span', { className: 'dsh-gh-badge' }, badge) : null),
 						hint ? h('span', { className: 'dsh-gh-hint' }, hint) : null),
-					h('div', { className: 'dsh-gh-row', style: { padding: 0, gap: 8 } },
+					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
 							className: 'dsh-gh-input', spellCheck: false, value: text,
 							placeholder: placeholder || '', disabled: busy,
@@ -280,7 +284,9 @@ window.__ModuleLoader__.load({
 						}),
 						h(TextRow, {
 							label: '本地工作区目录', field: 'workspaceRoot',
-							hint: '克隆/检出的仓库放这里（如 D:\\work_space\\github）。留空 = 无约定，agent 每次会问。agent 通过 github_get_me 读取此路径。',
+							badge: t.value && typeof t.value.workspaceRoot === 'string' && t.value.workspaceRoot.trim()
+								? '已设置' : '未设置',
+							hint: '克隆/检出的仓库放这里。留空 = 无约定，agent 每次会问；目录不存在时克隆会自动创建。',
 							placeholder: '例如 D:\\work_space\\github',
 							value: t.value && t.value.workspaceRoot, busy,
 							onWrite: (op, after) => write(NS_TOOLS, t, op, after),

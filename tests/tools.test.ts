@@ -93,6 +93,32 @@ describe('tool execute contracts', () => {
     expect(((await toolByName(withEmpty, 'github_get_me').execute({}, EXEC)) as Record<string, unknown>).workspace_root).toBe('D:/ws/github')
   })
 
+  it('github_get_me probes the workspace root: real dir vs missing path', async () => {
+    const { mkdtempSync, mkdirSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const root = mkdtempSync(join(tmpdir(), 'dsh-gh-ws-'))
+    try {
+      mkdirSync(join(root, 'todo-widget'))
+      mkdirSync(join(root, 'notes-app'))
+      mkdirSync(join(root, '.hidden'))
+      const { api } = makeApi({ '/user': { login: 'octocat' } })
+      const tools = buildGithubTools(api, { ...CONFIG, workspaceRoot: root }, { enableIssueWrites: false, enableGitDataTools: false })
+      const result = (await toolByName(tools, 'github_get_me').execute({}, EXEC)) as {
+        workspace: { exists: boolean; projects: string[] }
+      }
+      expect(result.workspace).toEqual({ exists: true, projects: ['notes-app', 'todo-widget'] })
+
+      const missing = buildGithubTools(api, { ...CONFIG, workspaceRoot: join(root, 'does-not-exist') }, { enableIssueWrites: false, enableGitDataTools: false })
+      const result2 = (await toolByName(missing, 'github_get_me').execute({}, EXEC)) as {
+        workspace: { exists: boolean; projects: string[] }
+      }
+      expect(result2.workspace).toEqual({ exists: false, projects: [] })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('github_get_me answers anonymous state WITHOUT a network call when unconfigured', async () => {
     const { api, calls } = makeApi({}, { credentialConfigured: false })
     const tools = buildGithubTools(api, CONFIG, { enableIssueWrites: false, enableGitDataTools: false })

@@ -14,6 +14,7 @@
  * lossless-JSON boundary anyway.
  */
 
+import { readdirSync, statSync } from 'node:fs'
 import { defineTool, type JsonValue, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 
 import type { GithubApi, IssueItem, PullRequestItem, ReleaseItem } from './api.ts'
@@ -139,11 +140,33 @@ export const GITHUB_WRITE_TOOLS: ReadonlySet<string> = new Set([
 // Phase 1 — read-only discovery
 // ---------------------------------------------------------------------------
 
+/**
+ * Probe the configured workspace root on the LOCAL filesystem: does it exist
+ * and which project folders does it hold? Best-effort — any failure degrades
+ * to `exists: false` rather than throwing, because a not-yet-created folder
+ * is a normal state (the agent creates it on first clone).
+ */
+function probeWorkspace(root: string | null): { exists: boolean; projects: string[] } | null {
+  if (!root) return null
+  try {
+    const stat = statSync(root)
+    if (!stat.isDirectory()) return { exists: false, projects: [] }
+    const projects = readdirSync(root, { withFileTypes: true })
+      .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+      .map(d => d.name)
+      .sort()
+      .slice(0, 50)
+    return { exists: true, projects }
+  } catch {
+    return { exists: false, projects: [] }
+  }
+}
+
 function getMeTool(api: GithubApi, workspaceRoot?: string): ToolDefinition {
   return defineTool({
     name: 'github_get_me',
     description:
-      'Check GitHub credentials: returns the authenticated user when a token is configured, or an anonymous notice (60 req/h rate limit, read-only public data) when not. Use this first to diagnose auth problems.',
+      'Check GitHub credentials: returns the authenticated user when a token is configured, or an anonymous notice (60 req/h rate limit, read-only public data) when not. Also reports the configured local workspace root and whether it exists (with the project folders inside). Use this first to diagnose auth problems.',
     parameters: {},
     output: {
       schema: { type: 'object', properties: {}, additionalProperties: true },
@@ -153,6 +176,7 @@ function getMeTool(api: GithubApi, workspaceRoot?: string): ToolDefinition {
       // Local workspace convention travels with the auth probe so recipes can
       // reference it without a separate tool or asking the user every time.
       const root = workspaceRoot?.trim() || null
+      const workspace = probeWorkspace(root)
       // Auth-state probe first: an unconfigured credential is a normal state
       // worth answering without burning a rate-limited request (and without
       // surfacing GitHub's 401 as if something were broken).
@@ -165,6 +189,7 @@ function getMeTool(api: GithubApi, workspaceRoot?: string): ToolDefinition {
           name: null,
           html_url: null,
           workspace_root: root,
+          workspace,
           note: 'No credential is configured for this reference. Requests run anonymously: public data only, 60 req/h core limit, and every write tool will fail with 401.',
         }
       }
@@ -178,6 +203,7 @@ function getMeTool(api: GithubApi, workspaceRoot?: string): ToolDefinition {
         name: user.name ?? null,
         html_url: user.html_url ?? null,
         workspace_root: root,
+        workspace,
       }
     },
   })
