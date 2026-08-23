@@ -48,7 +48,15 @@ token 永不进入子进程环境或日志。
 
 ### 令牌需要哪些权限
 
-使用 Fine-grained PAT，Repository access 选 **All repositories**
+**新手一键（推荐）**——点开下面这个链接，GitHub 会把插件需要的权限全部预选好：
+
+> https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github
+
+拉到底点 **Generate token**，把结果粘贴进设置界面即可。权衡：经典令牌的
+`repo` 权限是账户级（全部仓库可读写），不能限定到个别仓库；需要逐仓控制时
+用下面的细粒度令牌。
+
+**细粒度（进阶）**——Repository access 选 **All repositories**
 （新建仓库自动纳入覆盖范围）：
 
 | 想让 agent 做的事 | 最低权限要求 |

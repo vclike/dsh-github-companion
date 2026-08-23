@@ -54,7 +54,17 @@ The token never reaches subprocesses or logs.
 
 ### Which permissions to grant
 
-Use a fine-grained PAT with Repository access = **All repositories** (new
+**Easy mode (recommended for beginners)** — open this link; GitHub pre-checks
+everything the plugin needs:
+
+> https://github.com/settings/tokens/new?scopes=repo,workflow&description=dsh-plugin-github
+
+Scroll down, click **Generate token**, copy the value into the settings card.
+Tradeoff: a classic `repo` scope is account-wide (all repos, read/write) and
+cannot be limited to selected repositories. For per-repository control use a
+fine-grained PAT as below.
+
+**Fine-grained (advanced)** — Repository access = **All repositories** (new
 repos are covered automatically):
 
 | What you want the agent to do | Minimum permission |
