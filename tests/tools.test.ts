@@ -529,4 +529,72 @@ describe('v0.4.6 fixes from live-use findings', () => {
     expect(decodeURIComponent(calls[0])).toContain('until=2026-08-23T23:59:59Z')
     expect(result).toMatchObject({ ok: true, count: 0, has_more: true, next_page: 2 })
   })
+
+  it('github_list_notifications shapes the watch inbox with unread count and pagination', async () => {
+    const { api, calls } = makeRawApi(u =>
+      u.pathname === '/notifications'
+        ? new Response(
+            JSON.stringify([
+              {
+                id: 'n1',
+                unread: true,
+                reason: 'subscribed',
+                updated_at: '2026-08-22T10:00:00Z',
+                subject: { title: 'Fix browse', type: 'Issue', url: 'https://api.github.com/repos/o/r/issues/1' },
+                repository: { full_name: 'o/r', html_url: 'https://github.com/o/r' },
+              },
+              {
+                id: 'n2',
+                unread: false,
+                reason: 'mention',
+                updated_at: '2026-08-21T09:00:00Z',
+                subject: { title: 'Old thread', type: 'Issue', url: 'https://api.github.com/repos/o/r/issues/2' },
+                repository: { full_name: 'o/r', html_url: 'https://github.com/o/r' },
+              },
+            ]),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json', link: '<https://api.github.com/notifications?page=2>; rel="next"' },
+            },
+          )
+        : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const result = (await toolByName(tools(api), 'github_list_notifications').execute({}, EXEC)) as Record<string, unknown>
+    expect(calls[0]).toContain('/notifications')
+    expect(result).toMatchObject({ ok: true, count: 2, unread_count: 1, has_more: true, next_page: 2 })
+    const first = (result.notifications as Array<Record<string, unknown>>)[0]
+    expect(first).toMatchObject({
+      id: 'n1',
+      unread: true,
+      subject_title: 'Fix browse',
+      subject_type: 'Issue',
+      repo_full_name: 'o/r',
+    })
+
+    const all = (await toolByName(tools(api), 'github_list_notifications').execute({ all: true }, EXEC)) as unknown
+    void all
+    expect(calls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('transient network failures retry within the maxRetries budget, then succeed', async () => {
+    let attempts = 0
+    const client = new GithubClient(
+      { ...CONFIG, maxRetries: 1, getToken: async () => 't', describeToken: async () => ({ configured: true }) },
+      (() => {
+        attempts++
+        if (attempts === 1) return Promise.reject(new Error('fetch failed'))
+        return Promise.resolve(jsonResponse(200, [{ full_name: 'o/w1' }]))
+      }) as unknown as typeof fetch,
+    )
+    const api = new GithubApi(client)
+    const result = await api.listWatched({})
+    expect(result.ok).toBe(true)
+    expect(attempts).toBe(2)
+
+    const singleShot = new GithubClient(
+      { ...CONFIG, maxRetries: 0, getToken: async () => 't', describeToken: async () => ({ configured: true }) },
+      (() => Promise.reject(new Error('fetch failed'))) as unknown as typeof fetch,
+    )
+    await expect(new GithubApi(singleShot).listStarred({})).rejects.toThrow(/fetch failed/)
+  })
 })

@@ -22,7 +22,7 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 
 | 层 | 工具 | 注册条件 | 备注 |
 |---|---|---|---|
-| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue / **list_releases** / **latest_release** / **list_starred** / **list_forks** / **list_watched** | 总是 | 匿名不可用：star/fork/watch 三张个人表 |
+| 只读（常驻） | get_me / get_repository / get_file_contents / list_commits / search_repositories / search_code / search_issues / list_issues / get_issue / **list_releases** / **latest_release** / **list_starred** / **list_forks** / **list_watched** / **list_notifications** | 总是 | 匿名不可用：star/fork/watch/通知四张个人表 |
 | Issue 写 | create_issue / update_issue / add_issue_comment | 开关默认开 | 每次弹审批 |
 | Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request, **create_release**, **sync_fork** | 开关默认关 | 每次弹审批；sync_fork 仅快进合并，冲突报 merge_conflict |
 | 建仓 | create_repository | 开关默认关 | 强制私有 |

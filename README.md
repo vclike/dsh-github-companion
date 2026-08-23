@@ -8,6 +8,10 @@ permission-gate example plugin.
 
 English | [中文](README.zh.md)
 
+> Verified against DeepSeek Harness `0.1.0-rc.7` (declared in
+> `peerDependencies`). Breaking host releases are announced here after a
+> compatibility pass.
+
 ## What you get
 
 Two cordis plugins in one package:
@@ -17,14 +21,14 @@ Two cordis plugins in one package:
 | `dsh-plugin-github` | `github-tools` | Registers GitHub REST tools on `ctx.tools` |
 | `dsh-plugin-github/gate` | `github-permission-gate` | Example `tools/pre-execute` permission gate scoped to `github_*` tools |
 
-### Tools (25 total, registered per switches)
+### Tools (26 total, registered per switches)
 
 **Read / discovery** — always on:
 `github_get_me`, `github_get_repository`, `github_get_file_contents`,
 `github_list_commits`, `github_search_repositories`, `github_search_code`,
 `github_search_issues`, `github_list_issues`, `github_get_issue`,
 `github_list_releases`, `github_latest_release`, `github_list_starred`,
-`github_list_forks`, `github_list_watched`
+`github_list_forks`, `github_list_watched`, `github_list_notifications`
 
 **Issue writes** — switchable (`enableIssueWrites`, default on):
 `github_create_issue`, `github_update_issue`, `github_add_issue_comment`

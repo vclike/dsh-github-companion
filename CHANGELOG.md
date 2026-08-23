@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.7 (2026-08-23)
+
+Close out every finding from the live-use audit — one batch, no leftovers.
+
+- **New read tool `github_list_notifications`**: the watch inbox (unread by
+  default, `all:true` for everything, `participating` filter, pagination
+  fields). Watching now has its missing half.
+- **Transient network retries**: one-shot DNS/connection blips (seen live as
+  `fetch failed`) now consume the same `maxRetries` budget as rate limits
+  instead of failing the call immediately; aborts never retry.
+- **Host compatibility declared**: `peerDependencies` pin
+  `^0.1.0-rc.7 || ^0.1.1-rc.1`, both READMEs state the verified host
+  version — the openpencil-style silent drift cannot happen unnoticed here.
+- README tool counts corrected to 26 in English and Chinese.
+
 ## 0.4.6 (2026-08-23)
 
 Fixes found by live use (star digest + fork/watch audit), plus pagination

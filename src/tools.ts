@@ -1129,6 +1129,62 @@ function listWatchedTool(api: GithubApi, config: GithubToolsConfig): ToolDefinit
   })
 }
 
+function listNotificationsTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_notifications',
+    description:
+      "List the authenticated user's notifications (the watch inbox). Default returns unread only; pass all:true to include read ones. Pair with github_list_watched for subscriptions and github_get_issue to inspect an Issue subject.",
+    parameters: {
+      all: { type: 'boolean', description: 'Include notifications already marked as read; default false (unread only)' },
+      participating: { type: 'boolean', description: 'Only notifications in which the user directly participates' },
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listNotifications(
+        {
+          all: args.all === true ? true : undefined,
+          participating: args.participating === true ? true : undefined,
+          perPage: num(args.per_page) ?? undefined,
+          page: num(args.page) ?? undefined,
+        },
+        exec.signal,
+      )
+      if (!response.ok) return failure(response.status, response.data)
+      const rows = Array.isArray(response.data) ? response.data : []
+      const items = rows.map(raw => {
+        const n = raw as {
+          id?: string | number
+          unread?: boolean
+          reason?: string
+          updated_at?: string
+          subject?: { title?: string; type?: string; url?: string }
+          repository?: { full_name?: string; html_url?: string }
+        }
+        return {
+          id: str(n.id),
+          unread: n.unread === true,
+          reason: str(n.reason),
+          updated_at: str(n.updated_at),
+          subject_title: str(n.subject?.title),
+          subject_type: str(n.subject?.type),
+          subject_url: str(n.subject?.url),
+          repo_full_name: str(n.repository?.full_name),
+          repo_html_url: str(n.repository?.html_url),
+        }
+      })
+      return {
+        ok: true,
+        count: items.length,
+        unread_count: items.filter(i => i.unread).length,
+        notifications: items,
+        ...paginationFields(response),
+      }
+    },
+  })
+}
+
 function syncForkTool(api: GithubApi): ToolDefinition {
   return defineTool({
     name: 'github_sync_fork',
@@ -1195,6 +1251,7 @@ export function buildGithubTools(
     listStarredTool(api, config),
     listForksTool(api, config),
     listWatchedTool(api, config),
+    listNotificationsTool(api, config),
   ]
   if (section.enableIssueWrites) {
     tools.push(createIssueTool(api), updateIssueTool(api), addIssueCommentTool(api))

@@ -41,7 +41,7 @@ export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object(
   credentialRef: Schema.string().default('GITHUB_TOKEN').description('Environment-variable name that holds the GitHub PAT'),
   apiBaseUrl: Schema.string().default('https://api.github.com').description('GitHub REST API root (GHES: https://host/api/v3)'),
   requestTimeoutMs: Schema.number().default(30_000).min(1_000).max(300_000).description('Per-request timeout in ms'),
-  maxRetries: Schema.number().default(1).min(0).max(3).description('Retries for rate-limited responses'),
+  maxRetries: Schema.number().default(1).min(0).max(3).description('Retries for rate-limited responses and transient network failures'),
   maxPerPage: Schema.number().default(30).min(1).max(100).description('Upper bound for per_page on list/search tools'),
   maxFileBytes: Schema.number().default(262_144).min(1_024).max(4_194_304).description('Truncate file contents beyond this many bytes'),
   enableIssueWrites: Schema.boolean().default(true).description('Default for the settings-UI issue-write switch'),

@@ -274,6 +274,25 @@ export class GithubApi {
   }
 
   /**
+   * Notifications for the authenticated user (`/notifications`). Default
+   * returns unread only; `all` includes already-read items.
+   */
+  listNotifications(
+    opts: { all?: boolean; participating?: boolean; perPage?: number; page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<unknown[]>> {
+    return this.client.request('/notifications', {
+      query: {
+        all: opts.all === undefined ? undefined : String(opts.all),
+        participating: opts.participating === undefined ? undefined : String(opts.participating),
+        per_page: opts.perPage,
+        page: opts.page,
+      },
+      signal,
+    })
+  }
+
+  /**
    * Sync a fork branch with its upstream via the official merge-upstream
    * endpoint. 204 means already up to date; 409 means manual conflict
    * resolution is required.

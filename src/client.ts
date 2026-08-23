@@ -194,6 +194,13 @@ export class GithubClient {
         } as RequestInit)
       } catch (cause) {
         if (init.signal?.aborted) throw new GithubNetworkError('GitHub request aborted', cause)
+        // Transient network failures (DNS blip, reset connection) get the
+        // same retry budget as rate limits; a live abort never retries.
+        if (attempt + 1 < attempts) {
+          await sleep(retryDelayMs(new Headers(), attempt), init.signal)
+          if (init.signal?.aborted) throw new GithubNetworkError('GitHub request aborted while backing off')
+          continue
+        }
         throw new GithubNetworkError(
           `GitHub request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
           cause,
