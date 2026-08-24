@@ -1,6 +1,6 @@
 ---
 name: dsh-github-usage
-description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 GitHub 任务。只要会话中可用工具包含 github_get_me / github_search_repositories / github_push_files / github_create_repository 等任何 github_* 工具，或用户提出"上传项目到 GitHub / 建新仓库 / 管理 issue / 研究某个开源项目 / 看某仓库最近更新"类需求，先读本技能再动手——它包含能力开关地图、结果约定、权限前置、标准配方和故障速查，能避免反复试错（匿名限速、空仓推失败、重名 422、误建公开仓等）。
+description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 GitHub 任务。只要会话中可用工具包含 github_get_me / github_search_repositories / github_push_files / github_create_repository 等任何 github_* 工具，或用户提出"上传项目到 GitHub / 建新仓库 / 管理 issue / 研究某个开源项目 / 看某仓库最近更新 / 克隆、检出或下载某个仓库的代码"类需求，先读本技能再动手——它包含能力开关地图、结果约定、权限前置、标准配方和故障速查，能避免反复试错（匿名限速、空仓推失败、重名 422、误建公开仓等）。
 ---
 
 # 使用 dsh-plugin-github（agent 操作手册）
@@ -26,6 +26,8 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 | Issue 写 | create_issue / update_issue / add_issue_comment | 开关默认开 | 每次弹审批 |
 | Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request, **create_release**, **sync_fork** | 开关默认关 | 每次弹审批；sync_fork 仅快进合并，冲突报 merge_conflict |
 | 建仓 | create_repository | 开关默认关 | 强制私有 |
+| 目录树 | get_file_tree | 只读恒开 | 一次调用递归列出整棵树；truncated=true 时改分目录读或克隆 |
+| 我的仓库 | list_my_repositories | 只读恒开 | 含自己的私有仓；用户说"我的仓库"时先调它，别让用户口述 owner/repo |
 | 本地克隆 | clone_repository | 开关默认关（本地克隆工具） | 私有仓可克隆；token 只进单个 git 子进程的 env 认证头；落点=targetPath→默认克隆目录→报错要路径 |
 
 工具没出现在会话里 = 对应开关没开。引导用户到 设置 → GitHub 区块打开，而不是硬猜。

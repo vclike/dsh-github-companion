@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.0 (2026-08-24)
+
+Implements the high-value items of issue #2 (dogfooding retro).
+
+- New `github_get_file_tree`: one recursive Git-Data call lists the whole
+  tree under a ref (default branch resolved automatically). Upstream
+  truncation maps to `truncated: true` plus next-action guidance; entries
+  capped at 1000 locally with an explicit note.
+- New `github_list_my_repositories`: `/user/repos` with
+  visibility/affiliation/sort — the first discovery surface that includes
+  the user's own PRIVATE repositories.
+- `github_get_repository` now projects `permissions` ({admin,push,pull};
+  null when unknown/anonymous) and `archived`, so write tools can be
+  self-checked before hitting a 403.
+- Clone tool passes the live proxy through as HTTPS_PROXY/HTTP_PROXY to its
+  git subprocess — API proxying never implied git proxying (issue #2 §6).
+- Skill triggers now cover clone/checkout/download phrasing (guide source
+  and installed copy); READMEs document the empty-path-lists-root behavior
+  of get_file_contents and grow to 29 tools.
+
+Deferred by design (recorded on issue #2): inline-PAT migration into the
+credential-seam storage layer (needs host provider write capability),
+tarball export, and the gh-CLI integration (ruled out in appendix A).
+
 ## 0.5.0 (2026-08-24)
 
 Implements issue #1 — `github_clone_repository` (方案 1).

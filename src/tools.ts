@@ -57,6 +57,7 @@ function shapeRepo(data: unknown): Value {
   const d = data as Record<string, unknown>
   const license = d.license as { spdx_id?: string } | null | undefined
   const topics = d.topics
+  const perms = d.permissions as Record<string, unknown> | undefined
   return {
     full_name: str(d.full_name),
     description: str(d.description),
@@ -67,6 +68,13 @@ function shapeRepo(data: unknown): Value {
     language: str(d.language),
     license: license?.spdx_id ?? null,
     private: d.private === true,
+    archived: d.archived === true,
+    // Authenticated single-repo fetches carry this; anonymous/list calls
+    // don't — null there so callers can distinguish "unknown" from "no".
+    permissions:
+      perms && typeof perms === 'object'
+        ? { admin: perms.admin === true, push: perms.push === true, pull: perms.pull === true }
+        : null,
     created_at: str(d.created_at),
     pushed_at: str(d.pushed_at),
     topics: Array.isArray(topics) ? (topics.filter(t => typeof t === 'string') as string[]) : [],
@@ -249,7 +257,7 @@ function getFileContentsTool(api: GithubApi, config: GithubToolsConfig): ToolDef
   return defineTool({
     name: 'github_get_file_contents',
     description:
-      'Read one file from a GitHub repository (UTF-8 text), or list a directory when the path is a folder. Large files are truncated.',
+      'Read one file from a GitHub repository (UTF-8 text), or list a directory when the path is a folder (empty path = repo root). Files larger than the maxFileBytes setting are truncated.',
     parameters: {
       owner: { type: 'string', required: true, description: 'Repository owner' },
       repo: { type: 'string', required: true, description: 'Repository name' },
@@ -297,6 +305,100 @@ function getFileContentsTool(api: GithubApi, config: GithubToolsConfig): ToolDef
           : decoded,
         truncated,
         html_url: file.html_url ?? null,
+      }
+    },
+  })
+}
+
+function getFileTreeTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  const CAP = 1000
+  return defineTool({
+    name: 'github_get_file_tree',
+    description:
+      'Recursively list every file and directory under one ref in a single call (paths relative to repo root) — the fast way to explore an unknown repository before reading specific files.',
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner' },
+      repo: { type: 'string', required: true, description: 'Repository name' },
+      ref: { type: 'string', description: 'Branch, tag, or SHA; defaults to the default branch' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      let refName = typeof args.ref === 'string' && args.ref.trim() ? args.ref.trim() : undefined
+      if (!refName) {
+        const repoResp = await api.getRepository(args.owner, args.repo, exec.signal)
+        if (!repoResp.ok) return failure(repoResp.status, repoResp.data)
+        refName = str((repoResp.data as Record<string, unknown>).default_branch) || 'main'
+      }
+      const response = await api.getTree(args.owner, args.repo, refName, exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      const data = response.data as { tree?: unknown; truncated?: boolean }
+      const all = Array.isArray(data.tree) ? (data.tree as Array<Record<string, unknown>>) : []
+      const entries = all.slice(0, CAP).map(t => ({
+        path: str(t.path),
+        type: str(t.type),
+        size: t.size == null ? null : num(t.size),
+        sha: str(t.sha),
+      }))
+      const truncated = data.truncated === true || all.length > CAP
+      return {
+        ok: true,
+        ref: refName,
+        total: all.length,
+        entries_shown: entries.length,
+        truncated,
+        entries,
+        ...(truncated
+          ? { note: '树过大被截断——改用分目录 github_get_file_contents 或 github_clone_repository' }
+          : {}),
+      }
+    },
+  })
+}
+
+function getListMyRepositoriesTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_my_repositories',
+    description:
+      "List repositories accessible to the authenticated user — including your own PRIVATE repositories, which no other list tool exposes. Call this before asking the user which of their repos they mean.",
+    parameters: {
+      visibility: { type: 'string', description: "'all' | 'public' | 'private'; default 'all'" },
+      affiliation: {
+        type: 'string',
+        description: "Comma-separated: owner,collaborator,organization_member; default 'owner,collaborator,organization_member'",
+      },
+      sort: { type: 'string', description: "'updated' | 'full_name' | 'created' | 'pushed'; default 'updated'" },
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listMyRepositories(
+        {
+          visibility: typeof args.visibility === 'string' ? args.visibility : undefined,
+          affiliation: typeof args.affiliation === 'string' ? args.affiliation : undefined,
+          sort: typeof args.sort === 'string' ? args.sort : undefined,
+          perPage: num(args.per_page) ?? undefined,
+          page: num(args.page) ?? undefined,
+        },
+        exec.signal,
+      )
+      if (!response.ok) return failure(response.status, response.data)
+      const repos = Array.isArray(response.data) ? response.data : []
+      return {
+        ok: true,
+        count: repos.length,
+        repositories: repos.map(r => {
+          const d = r as Record<string, unknown>
+          return {
+            full_name: str(d.full_name),
+            private: d.private === true,
+            description: str(d.description),
+            language: str(d.language),
+            pushed_at: str(d.pushed_at),
+            html_url: str(d.html_url),
+          }
+        }),
+        ...paginationFields(response),
       }
     },
   })
@@ -1284,6 +1386,8 @@ export function buildGithubTools(
     listForksTool(api, config),
     listWatchedTool(api, config),
     listNotificationsTool(api, config),
+    getFileTreeTool(api, config),
+    getListMyRepositoriesTool(api, config),
   ]
   if (section.enableIssueWrites) {
     tools.push(createIssueTool(api), updateIssueTool(api), addIssueCommentTool(api))

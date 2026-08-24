@@ -79,6 +79,11 @@ export class GithubApi {
     return this.client.token()
   }
 
+  /** Live proxy URL for credential-bridging subprocesses (empty → none). */
+  effectiveProxy(): string | undefined {
+    return this.client.effectiveProxy()
+  }
+
   // ---------- discovery (Phase 1) ----------
 
   /** Credential-configured probe; never exposes the value. */
@@ -270,6 +275,34 @@ export class GithubApi {
   ): Promise<GithubResponse<unknown[]>> {
     const query = { type: 'owner', sort: 'pushed', per_page: opts.perPage, page: opts.page }
     return this.client.request(`/user/repos`, { query, signal })
+  }
+
+  /**
+   * Repositories accessible to the authenticated user (`/user/repos`) — the
+   * only discovery surface that includes their own PRIVATE repositories.
+   */
+  listMyRepositories(
+    opts: { visibility?: string; affiliation?: string; sort?: string; perPage?: number; page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<unknown[]>> {
+    return this.client.request('/user/repos', {
+      query: {
+        visibility: opts.visibility,
+        affiliation: opts.affiliation,
+        sort: opts.sort ?? 'updated',
+        per_page: opts.perPage,
+        page: opts.page,
+      },
+      signal,
+    })
+  }
+
+  /** Recursive git tree (Git Data API); `ref` may be a branch/tag/SHA. */
+  getTree(owner: string, repo: string, ref: string, signal?: AbortSignal): Promise<GithubResponse<unknown>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/git/trees/${enc(ref)}`, {
+      query: { recursive: '1' },
+      signal,
+    })
   }
 
   /**

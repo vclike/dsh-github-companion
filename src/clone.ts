@@ -180,7 +180,16 @@ export function cloneRepositoryTool(
 
       const host = remoteHost(config.apiBaseUrl)
       const remote = `${host}/${owner}/${repo}.git`
-      const token = await api.readToken()
+      // API traffic and git subprocess traffic have independent proxy needs:
+      // pass the live proxy through so a proxied host can actually be cloned.
+      const [token, proxy] = await Promise.all([api.readToken(), Promise.resolve(api.effectiveProxy())])
+      const env: Record<string, string> | undefined =
+        token || proxy
+          ? {
+              ...(token ? authEnv(token, host) : {}),
+              ...(proxy ? { HTTPS_PROXY: proxy, HTTP_PROXY: proxy } : {}),
+            }
+          : undefined
 
       const baseArgs = ['-c', 'credential.helper=', 'clone', '--quiet']
       if (args.ref) baseArgs.push('--branch', String(args.ref))
@@ -191,7 +200,7 @@ export function cloneRepositoryTool(
       baseArgs.push(remote, target)
 
       const runOpts = {
-        env: token ? authEnv(token, host) : undefined,
+        env,
         timeoutMs: config.gitTimeoutMs,
         signal: exec.signal,
       }

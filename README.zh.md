@@ -46,14 +46,16 @@ dsh plugin add dsh-plugin-github        # 装完重启 DSH
 | `dsh-plugin-github` | `github-tools` | 向 `ctx.tools` 注册 GitHub REST 工具 |
 | `dsh-plugin-github/gate` | `github-permission-gate` | 针对 `github_*` 工具的 `tools/pre-execute` 权限门示例 |
 
-### 工具清单（共 27 个，按开关注册）
+### 工具清单（共 29 个，按开关注册）
 
 **只读/发现** — 恒开：
 `github_get_me`、`github_get_repository`、`github_get_file_contents`、
 `github_list_commits`、`github_search_repositories`、`github_search_code`、
 `github_search_issues`、`github_list_issues`、`github_get_issue`、
 `github_list_releases`、`github_latest_release`、`github_list_starred`、
-`github_list_forks`、`github_list_watched`、`github_list_notifications`
+`github_list_forks`、`github_list_watched`、`github_list_notifications`、
+`github_get_file_tree`（一次调用递归列出整棵目录树）、
+`github_list_my_repositories`（唯一包含你自己私有仓的清单工具）
 
 **Issue 写操作** — 可开关（`enableIssueWrites`，默认开）：
 `github_create_issue`、`github_update_issue`、`github_add_issue_comment`

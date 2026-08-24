@@ -51,8 +51,11 @@ vi.mock('node:child_process', () => ({
 
 const TOKEN = 'ghp_super_secret_token_value_123'
 
-function makeApi(token?: string): GithubApi {
-  return { readToken: async () => token } as unknown as GithubApi
+function makeApi(token?: string, proxy?: string): GithubApi {
+  return {
+    readToken: async () => token,
+    effectiveProxy: async () => proxy,
+  } as unknown as GithubApi
 }
 
 const CONFIG: GithubToolsConfig = {
@@ -96,6 +99,16 @@ describe('github_clone_repository (L1)', () => {
     const tool = cloneRepositoryTool(makeApi(undefined), CONFIG, 'D:/tmp/clones')
     await tool.execute({ owner: 'octocat', repo: 'hello-world' }, { signal: new AbortController().signal } as never)
     expect(HOISTED.spawned[0].env?.GIT_CONFIG_COUNT).toBeUndefined()
+  })
+
+  it('passes the live proxy through as HTTPS_PROXY/HTTP_PROXY for the subprocess', async () => {
+    const tool = cloneRepositoryTool(makeApi(undefined, 'http://127.0.0.1:7890'), CONFIG, 'D:/tmp/clones')
+    await tool.execute({ owner: 'octocat', repo: 'behind-proxy' }, { signal: new AbortController().signal } as never)
+    const env = HOISTED.spawned[0].env
+    expect(env?.HTTPS_PROXY).toBe('http://127.0.0.1:7890')
+    expect(env?.HTTP_PROXY).toBe('http://127.0.0.1:7890')
+    // API-side proxy must not imply a credential leak into the env header slot.
+    expect(env?.GIT_CONFIG_COUNT).toBeUndefined()
   })
 
   it('rejects a non-empty target directory with structured already_exists', async () => {

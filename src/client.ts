@@ -121,6 +121,12 @@ export class GithubClient {
     return this.options.getToken()
   }
 
+  /** Live proxy URL for subprocess env passthrough (empty/absent → none). */
+  effectiveProxy(): string | undefined {
+    const url = typeof this.options.proxyUrl === 'string' ? this.options.proxyUrl.trim() : ''
+    return url || undefined
+  }
+
   /**
    * Resolve the proxy dispatcher once per distinct proxyUrl. A missing or
    * failed optional `undici` import degrades to a direct connection with a
