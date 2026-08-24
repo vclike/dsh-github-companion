@@ -151,8 +151,8 @@ list_languages 技术栈 + get_commit_activity 活跃度 + list_contributors 核
 get_file_tree 结构 → latest_release / list_tags 版本线 → list_commits(since=关键节点)
 看演进；README 用 get_file_contents path="README.md"。
 
-**R2 发现面**（宿主 web_search 3~5 次）：项目概述、官网、主要竞品。
-**R3 深挖面**（web_search + 网页抓取 5~10 次）：架构细节、关键事件时间线、社区口碑。
+**R2 发现面**（用会话的默认搜索工具查 3~5 次）：项目概述、官网、主要竞品。
+**R3 深挖面**（默认搜索工具 + 网页抓取正文 5~10 次；引用前先读原文）：架构细节、关键事件时间线、社区口碑。
 **R4 综合**：用 R1 的 commit/issue/tag 数据佐证或修正 R2/R3 的文章说法——提交记录比文章可靠。
 
 产出 research_{主题}_{YYYYMMDD}.md：元数据(日期/置信度) → 执行摘要(2-3 句+核心指标) →
