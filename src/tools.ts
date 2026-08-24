@@ -17,6 +17,7 @@
 import { readdirSync, statSync } from 'node:fs'
 import { defineTool, type JsonValue, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 
+import { cloneRepositoryTool } from './clone.ts'
 import type { GithubApi, IssueItem, PullRequestItem, ReleaseItem } from './api.ts'
 import type { GithubToolsConfig } from './config.ts'
 
@@ -1261,6 +1262,7 @@ export function buildGithubTools(
     enableIssueWrites: boolean
     enableGitDataTools: boolean
     enableRepoCreation?: boolean
+    enableCloneTools?: boolean
     /** User-layer override for the workspace convention (wins over config). */
     workspaceRoot?: string
   },
@@ -1300,6 +1302,12 @@ export function buildGithubTools(
       createReleaseTool(api),
       syncForkTool(api),
     )
+  }
+  if (section.enableCloneTools) {
+    // Local clone: the PAT bridges to exactly ONE git subprocess (env-injected
+    // header); deliberately NOT in GITHUB_WRITE_TOOLS — it is a read-shaped
+    // operation guarded by its own switch (see issue #1 §5.7).
+    tools.push(cloneRepositoryTool(api, config, effectiveWorkspaceRoot))
   }
   return tools
 }

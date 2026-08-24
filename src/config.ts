@@ -23,6 +23,15 @@ export interface GithubToolsConfig {
   enableGitDataTools: boolean
   /** Composition default for the settings-UI repo-creation switch (user layer can override). */
   enableRepoCreation: boolean
+  /** Composition default for the settings-UI clone-tool switch (user layer can override). */
+  enableCloneTools: boolean
+  /**
+   * Force a TLS backend for the local git subprocess ('' = git default).
+   * Windows schannel failures are auto-retried over openssl when unset.
+   */
+  gitSslBackend: string
+  /** Hard cap for one git subprocess (clone), in milliseconds. */
+  gitTimeoutMs: number
   /**
    * Local directory where cloned/checked-out repositories live. Empty means
    * "no convention" — the agent asks where to put things. Surfaced in
@@ -47,6 +56,9 @@ export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object(
   enableIssueWrites: Schema.boolean().default(true).description('Default for the settings-UI issue-write switch'),
   enableGitDataTools: Schema.boolean().default(false).description('Default for the settings-UI git-data-write switch'),
   enableRepoCreation: Schema.boolean().default(false).description('Default for the settings-UI private-repo-creation switch'),
+  enableCloneTools: Schema.boolean().default(false).description('Default for the settings-UI local-clone switch (token bridges to ONE git subprocess via env header)'),
+  gitSslBackend: Schema.string().default('').description("TLS backend for the git subprocess: '' = git default, or 'openssl'/'schannel'"),
+  gitTimeoutMs: Schema.number().default(300_000).min(5_000).max(1_800_000).description('Timeout for one git clone subprocess in ms'),
   workspaceRoot: Schema.string().default('').description('Local root directory for cloned/checked-out repositories (empty = no convention)'),
   proxyUrl: Schema.string().default('').description('Optional HTTP(S) proxy for GitHub API traffic (e.g. http://127.0.0.1:7890)'),
 })
@@ -61,6 +73,8 @@ export interface GithubToolsSection {
    * visibility argument — public repos stay a manual web action.
    */
   enableRepoCreation: boolean
+  /** Register github_clone_repository (token bridges to ONE local git subprocess). */
+  enableCloneTools: boolean
   /** Local root directory for cloned/checked-out repositories (empty = unset). */
   workspaceRoot: string
   /** Optional HTTP(S) proxy for GitHub API traffic (empty = direct). */
@@ -77,6 +91,7 @@ export const GithubToolsSectionSchema: Schema<GithubToolsSection> = Schema.objec
   enableIssueWrites: Schema.boolean().default(true).description('Allow issue/comment write tools'),
   enableGitDataTools: Schema.boolean().default(false).description('Allow branch/commit/PR write tools'),
   enableRepoCreation: Schema.boolean().default(false).description('Allow creating new PRIVATE repositories (never public)'),
+  enableCloneTools: Schema.boolean().default(false).description('Register github_clone_repository (local clone with token bridged to ONE git subprocess)'),
   workspaceRoot: Schema.string().default('').description('Local root directory for cloned/checked-out repositories'),
   proxyUrl: Schema.string().default('').description('Optional HTTP(S) proxy for GitHub API traffic'),
   token: Schema.string().role('secret').description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),

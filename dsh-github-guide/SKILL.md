@@ -26,6 +26,7 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 | Issue 写 | create_issue / update_issue / add_issue_comment | 开关默认开 | 每次弹审批 |
 | Git 数据写 | list/get_pull_requests, create_branch, create_or_update_file, push_files, create_pull_request, **create_release**, **sync_fork** | 开关默认关 | 每次弹审批；sync_fork 仅快进合并，冲突报 merge_conflict |
 | 建仓 | create_repository | 开关默认关 | 强制私有 |
+| 本地克隆 | clone_repository | 开关默认关（本地克隆工具） | 私有仓可克隆；token 只进单个 git 子进程的 env 认证头；落点=targetPath→默认克隆目录→报错要路径 |
 
 工具没出现在会话里 = 对应开关没开。引导用户到 设置 → GitHub 区块打开，而不是硬猜。
 
@@ -132,6 +133,15 @@ watchlist 来源（按优先级）：用户点名的 `owner/repo` 列表；用�
 | 422 already_exists | 重名 | 复用或改名（见配方 A.4） |
 | 推送报"分支不存在" | 空仓库 | 建仓用 auto_init，或先造初始提交 |
 | 工具根本不存在 | 开关未开 | 引导设置界面开启对应层 |
+
+
+## 配方 H · 克隆仓库到本机
+
+用户说"clone 我的私有仓 X 到 Y"时**一律走** `github_clone_repository`，不要让用户在终端手动 clone，也不要绕道 bash git（沙箱内 git 无法自助认证）。
+
+1. 确认工具存在（设置 → GitHub → 本地克隆工具 已开）；没有就提示用户开启后重试。
+2. `github_clone_repository { owner, repo, targetPath? }`——不传 targetPath 时落到「默认克隆目录」；两处都没有会收到要求路径的结构化错误，转述即可。
+3. 成功返回 `{ ok, path, branch, headCommit }`；失败按 `code` 分支：`already_exists` 换目录、`empty_repo` 建议带 README 重建或 push_files 首提交、`auth_failed/not_found` 提示检查令牌范围。
 
 ## 7. 审批预期
 

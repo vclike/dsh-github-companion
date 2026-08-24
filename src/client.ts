@@ -114,6 +114,14 @@ export class GithubClient {
   }
 
   /**
+   * Raw token for credential-bridging subprocesses (local git clone). The
+   * value must never be logged, rendered, or embedded in canonical results.
+   */
+  token(): Promise<string | undefined> {
+    return this.options.getToken()
+  }
+
+  /**
    * Resolve the proxy dispatcher once per distinct proxyUrl. A missing or
    * failed optional `undici` import degrades to a direct connection with a
    * console warning rather than breaking every request.

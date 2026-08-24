@@ -71,6 +71,14 @@ function encodePath(path: string): string {
 export class GithubApi {
   constructor(readonly client: GithubClient) {}
 
+  /**
+   * Raw token for credential-bridging subprocesses (local git clone). The
+   * value must never be logged, rendered, or embedded in canonical results.
+   */
+  async readToken(): Promise<string | undefined> {
+    return this.client.token()
+  }
+
   // ---------- discovery (Phase 1) ----------
 
   /** Credential-configured probe; never exposes the value. */

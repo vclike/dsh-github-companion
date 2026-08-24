@@ -24,7 +24,7 @@
 | “看看某仓库的某个源码文件怎么实现的” | 直接读公开代码、搜代码，不用离开对话 | `get_file_contents` · `search_code` |
 
 **安全模型** —— 读工具恒开；一切写操作（issue/分支/文件/发版/建仓）都经过
-权限门，先弹审批再执行；新建仓库**强制私有**；令牌不会进入子进程或日志。
+权限门，先弹审批再执行；新建仓库**强制私有**；令牌不会进入子进程或日志（本地克隆工具开启时除外——见工具清单）。
 没有令牌也能匿名只读公开数据（60 次/小时）。
 
 ## 快速上手
@@ -46,7 +46,7 @@ dsh plugin add dsh-plugin-github        # 装完重启 DSH
 | `dsh-plugin-github` | `github-tools` | 向 `ctx.tools` 注册 GitHub REST 工具 |
 | `dsh-plugin-github/gate` | `github-permission-gate` | 针对 `github_*` 工具的 `tools/pre-execute` 权限门示例 |
 
-### 工具清单（共 26 个，按开关注册）
+### 工具清单（共 27 个，按开关注册）
 
 **只读/发现** — 恒开：
 `github_get_me`、`github_get_repository`、`github_get_file_contents`、
@@ -79,7 +79,7 @@ harness 凭证缝（`ctx.credentials`）每次请求前解析——在任意 pro
 随时轮换，下一次请求即生效，无需重启。未配置 token 时工具以匿名模式访问公开
 仓库（核心限速 60 次/小时）；`github_get_me` 会如实报告该状态。
 
-token 永不进入子进程环境或日志。
+token 永不进入子进程环境或日志——唯一的、可开关的例外：github_clone_repository 会把 token 经环境变量注入的认证头交给单个本地 git 子进程（不进命令行参数、URL、.git/config 或日志），子进程随操作结束消亡，token 在 harness 之外零残留。
 
 ### 第一步 · 申请令牌（二选一）
 

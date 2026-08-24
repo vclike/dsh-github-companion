@@ -38,6 +38,7 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
       enableIssueWrites: config.enableIssueWrites,
       enableGitDataTools: config.enableGitDataTools,
       enableRepoCreation: config.enableRepoCreation,
+      enableCloneTools: config.enableCloneTools,
       workspaceRoot: config.workspaceRoot,
       proxyUrl: config.proxyUrl,
     },

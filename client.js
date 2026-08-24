@@ -429,6 +429,11 @@ window.__ModuleLoader__.load({
 							label: '自动新建仓库', hint: '允许 agent 创建新的私有仓库（强制 private，无法创建公开仓库；需令牌含 Administration 权限）',
 							checked: !!(t.value && t.value.enableRepoCreation),
 							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableRepoCreation'], value: v }),
+ 						}),
+ 						h(ToggleRow, {
+ 							label: '本地克隆工具', hint: '允许 agent 把仓库（含私有仓）克隆到本机目录；令牌只经环境变量注入单个 git 子进程，不进命令行、URL、.git/config 和日志',
+ 							checked: !!(t.value && t.value.enableCloneTools),
+ 							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableCloneTools'], value: v }),
 						}),
 						h(TextRow, {
 							label: '默认克隆目录', field: 'workspaceRoot',

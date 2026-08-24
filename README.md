@@ -53,7 +53,7 @@ Two cordis plugins in one package:
 | `dsh-plugin-github` | `github-tools` | Registers GitHub REST tools on `ctx.tools` |
 | `dsh-plugin-github/gate` | `github-permission-gate` | Example `tools/pre-execute` permission gate scoped to `github_*` tools |
 
-### Tools (26 total, registered per switches)
+### Tools (27 total, registered per switches)
 
 **Read / discovery** — always on:
 `github_get_me`, `github_get_repository`, `github_get_file_contents`,
@@ -74,6 +74,13 @@ Two cordis plugins in one package:
 `github_create_repository` — always creates a **private** repository (no
 visibility argument exists); requires Administration (rw) on the token.
 
+**Local clone** — switchable (`enableCloneTools`, default **off**):
+`github_clone_repository` — clones any repo you can access (private
+included) to a local directory via the machine's git. The PAT is bridged to
+exactly ONE git subprocess through an environment-injected auth header
+(the actions/checkout mechanism); it never appears in argv, the remote URL,
+`.git/config`, logs, or the conversation.
+
 Canonical results are JSON-safe objects with a top-level `ok` field. GitHub
 domain failures (404/401/403/422…) return `{ ok: false, status, message }`
 instead of throwing, so the model can react programmatically; only network
@@ -89,7 +96,11 @@ shell), rotate it any time, and the next request picks it up without a
 restart. Without a token the tools work anonymously against public repos
 (60 req/h core limit); `github_get_me` reports that state.
 
-The token never reaches subprocesses or logs.
+The token never reaches subprocesses or logs — with ONE deliberate,
+switchable exception: `github_clone_repository` hands it to a single local
+git subprocess via an environment-injected header (not argv, not the URL,
+not `.git/config`, not logs). The subprocess dies with the operation; the
+token never persists outside the harness.
 
 ### Step 1 — Apply for a token (pick ONE)
 

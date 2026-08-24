@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.0 (2026-08-24)
+
+Implements issue #1 — `github_clone_repository` (方案 1).
+
+- New switchable clone tool (`enableCloneTools`, default off): clones any
+  accessible repo — private included — to a local directory using the
+  machine's git, closing the gap that left agents detouring into Git
+  Credential Manager queries on sandboxed private-clone attempts.
+- Credential bridge by env-injected `http.<host>/.extraheader` basic header
+  (the official actions/checkout mechanism): token touches neither argv nor
+  the remote URL nor `.git/config` nor stderr/logs; `credential.helper=`
+  is force-cleared; the env block lives only for the single subprocess.
+- Structured error matrix with next-action messages: `git_not_found`,
+  `auth_failed`, `not_found`, `already_exists`, `empty_repo` (with
+  half-clone cleanup), `tls_backend_failed`; schannel failures auto-retry
+  once over openssl unless a backend is pinned (`gitSslBackend`).
+- Landing spot honors the long-promised priority: explicit `targetPath` →
+  settings 默认克隆目录/`workspaceRoot` → structured guidance; `ref` and
+  opt-in `depth` forwarded; `exec.signal` and `gitTimeoutMs` enforced.
+- REST→git host mapping handles both api.github.com and GHES /api/v3 roots.
+- L1 suite grows to 58 tests incl. hard no-token-leak assertions over argv,
+  env, and canonical results; settings UI gains a 本地克隆工具 toggle;
+  bilingual READMEs updated including the revised token-subprocess promise.
+
 ## 0.4.10 (2026-08-23)
 
 - Approval prompts are now Chinese-first and self-explanatory: each gated
