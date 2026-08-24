@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.0 (2026-08-24)
+
+Internalizes the core of deer-flow's github-deep-research skill (issue-free
+dogfooding follow-up to #2).
+
+- Four new always-on read tools close the last research gaps:
+  `github_list_languages` (byte shares sorted desc), `github_list_contributors`
+  (ranked by contributions, paginated), `github_list_tags`, and
+  `github_get_commit_activity` — including correct handling of GitHub's
+  lazy stats endpoint (202 cold cache surfaces as `pending: true` with retry
+  guidance instead of an empty-looking result).
+- Usage skill gains 配方 I: the four-round deep-research methodology mapped
+  onto native plugin tools for round one (authenticated, 5000 req/h vs the
+  script's anonymous 60 req/h), with web rounds kept in the harness; report
+  structure, confidence tiers, and inline-citation rules condensed.
+- Tool count 29 → 33; tests 65 → 71.
+
 ## 0.6.0 (2026-08-24)
 
 Implements the high-value items of issue #2 (dogfooding retro).

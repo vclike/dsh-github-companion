@@ -355,6 +355,153 @@ function getFileTreeTool(api: GithubApi, config: GithubToolsConfig): ToolDefinit
   })
 }
 
+function getListLanguagesTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_languages',
+    description: 'Language breakdown of a repository in bytes, largest first with share percentages — the quickest tech-stack fingerprint.',
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner' },
+      repo: { type: 'string', required: true, description: 'Repository name' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listLanguages(args.owner, args.repo, exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      const raw = response.data ?? {}
+      const pairs = Object.entries(raw as Record<string, number>)
+        .filter(([, bytes]) => typeof bytes === 'number')
+        .sort((a, b) => (b[1] as number) - (a[1] as number))
+      const total = pairs.reduce((sum, [, b]) => sum + (b as number), 0) || 1
+      return {
+        ok: true,
+        total_bytes: total,
+        languages: pairs.map(([language, bytes]) => ({
+          language,
+          bytes,
+          share_percent: Math.round(((bytes as number) / total) * 1000) / 10,
+        })),
+      }
+    },
+  })
+}
+
+function getListContributorsTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_contributors',
+    description:
+      "List repository contributors ranked by commit count — the core-signals view of who maintains a project. Anonymous GitHub accounts may appear without a login.",
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner' },
+      repo: { type: 'string', required: true, description: 'Repository name' },
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listContributors(
+        args.owner,
+        args.repo,
+        { perPage: num(args.per_page) ?? undefined, page: num(args.page) ?? undefined },
+        exec.signal,
+      )
+      if (!response.ok) return failure(response.status, response.data)
+      const rows = Array.isArray(response.data) ? response.data : []
+      return {
+        ok: true,
+        count: rows.length,
+        contributors: rows.map(c => {
+          const d = c as Record<string, unknown>
+          return {
+            login: str(d.login),
+            contributions: num(d.contributions),
+            html_url: str(d.html_url),
+          }
+        }),
+        ...paginationFields(response),
+      }
+    },
+  })
+}
+
+function getListTagsTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_list_tags',
+    description: 'List repository tags (name + commit sha), newest first — useful for version timelines when releases are not used.',
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner' },
+      repo: { type: 'string', required: true, description: 'Repository name' },
+      per_page: { type: 'number', description: `1-${config.maxPerPage}, default ${Math.min(config.maxPerPage, 30)}` },
+      page: { type: 'number', description: 'Page number; results carry has_more/next_page' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.listTags(
+        args.owner,
+        args.repo,
+        { perPage: num(args.per_page) ?? undefined, page: num(args.page) ?? undefined },
+        exec.signal,
+      )
+      if (!response.ok) return failure(response.status, response.data)
+      const rows = Array.isArray(response.data) ? response.data : []
+      return {
+        ok: true,
+        count: rows.length,
+        tags: rows.map(t => {
+          const d = t as Record<string, unknown>
+          return { name: str(d.name), sha: str(d.sha) }
+        }),
+        ...paginationFields(response),
+      }
+    },
+  })
+}
+
+function getCommitActivityTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
+  return defineTool({
+    name: 'github_get_commit_activity',
+    description:
+      'Weekly commit counts for the last year plus rolling totals — the fastest activity/health signal for research. First-ever call may be pending while GitHub computes stats.',
+    parameters: {
+      owner: { type: 'string', required: true, description: 'Repository owner' },
+      repo: { type: 'string', required: true, description: 'Repository name' },
+    },
+    output: { schema: { type: 'object', properties: {}, additionalProperties: true }, render: TEXT_RENDER },
+    async execute(args, exec): Promise<Value> {
+      const response = await api.getCommitActivity(args.owner, args.repo, exec.signal)
+      if (!response.ok) return failure(response.status, response.data)
+      // Cold cache: GitHub answers 202 with an empty body.
+      if (response.status === 202 || !Array.isArray(response.data)) {
+        return {
+          ok: true,
+          pending: true,
+          message: '统计首次生成中（GitHub 冷缓存）——约半分钟后重试本工具即可。',
+        }
+      }
+      // GitHub's stats endpoint returns `week` as Unix seconds; older docs
+      // and some mirrors use ISO strings — normalize both to YYYY-MM-DD.
+      const isoDay = (v: unknown): string => {
+        if (typeof v === 'number') return new Date(v * 1000).toISOString().slice(0, 10)
+        return (str(v) ?? '').slice(0, 10)
+      }
+      const weeks = (response.data as Array<Record<string, unknown>>).map(w => ({
+        week: isoDay(w.week),
+        commits: num(w.total),
+      }))
+      const totalsFor = (n: number) =>
+        weeks.slice(-n).reduce((sum, w) => sum + (typeof w.commits === 'number' ? w.commits : 0), 0)
+      return {
+        ok: true,
+        pending: false,
+        weeks_covered: weeks.length,
+        commits_last_4w: totalsFor(4),
+        commits_last_12w: totalsFor(12),
+        commits_52w: totalsFor(52),
+        weekly: weeks,
+      }
+    },
+  })
+}
+
 function getListMyRepositoriesTool(api: GithubApi, config: GithubToolsConfig): ToolDefinition {
   return defineTool({
     name: 'github_list_my_repositories',
@@ -1388,6 +1535,10 @@ export function buildGithubTools(
     listNotificationsTool(api, config),
     getFileTreeTool(api, config),
     getListMyRepositoriesTool(api, config),
+    getListLanguagesTool(api, config),
+    getListContributorsTool(api, config),
+    getListTagsTool(api, config),
+    getCommitActivityTool(api, config),
   ]
   if (section.enableIssueWrites) {
     tools.push(createIssueTool(api), updateIssueTool(api), addIssueCommentTool(api))

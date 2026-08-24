@@ -28,6 +28,10 @@ description: 如何正确驱动已安装的 dsh-plugin-github 工具集完成 Gi
 | 建仓 | create_repository | 开关默认关 | 强制私有 |
 | 目录树 | get_file_tree | 只读恒开 | 一次调用递归列出整棵树；truncated=true 时改分目录读或克隆 |
 | 我的仓库 | list_my_repositories | 只读恒开 | 含自己的私有仓；用户说"我的仓库"时先调它，别让用户口述 owner/repo |
+| 语言构成 | list_languages | 只读恒开 | 字节占比排序，技术栈指纹一步到位 |
+| 贡献者 | list_contributors | 只读恒开 | 按提交数排名的核心维护者视图 |
+| 标签 | list_tags | 只读恒开 | 不发 Release 的项目用标签看版本线 |
+| 提交活跃度 | get_commit_activity | 只读恒开 | 近一年周度提交数+4/12/52 周滚动合计；首次调用可能 pending，半分钟后重试 |
 | 本地克隆 | clone_repository | 开关默认关（本地克隆工具） | 私有仓可克隆；token 只进单个 git 子进程的 env 认证头；落点=targetPath→默认克隆目录→报错要路径 |
 
 工具没出现在会话里 = 对应开关没开。引导用户到 设置 → GitHub 区块打开，而不是硬猜。
@@ -136,6 +140,27 @@ watchlist 来源（按优先级）：用户点名的 `owner/repo` 列表；用�
 | 推送报"分支不存在" | 空仓库 | 建仓用 auto_init，或先造初始提交 |
 | 工具根本不存在 | 开关未开 | 引导设置界面开启对应层 |
 
+
+
+## 配方 I · 开源项目深度调研
+
+用户要求"全面分析/调研/对比/梳理某开源项目"时按四轮执行：
+
+**R1 数据面（全用插件工具，带 token 5000 req/h）**：get_repository 基础盘 →
+list_languages 技术栈 + get_commit_activity 活跃度 + list_contributors 核心维护者 +
+get_file_tree 结构 → latest_release / list_tags 版本线 → list_commits(since=关键节点)
+看演进；README 用 get_file_contents path="README.md"。
+
+**R2 发现面**（宿主 web_search 3~5 次）：项目概述、官网、主要竞品。
+**R3 深挖面**（web_search + 网页抓取 5~10 次）：架构细节、关键事件时间线、社区口碑。
+**R4 综合**：用 R1 的 commit/issue/tag 数据佐证或修正 R2/R3 的文章说法——提交记录比文章可靠。
+
+产出 research_{主题}_{YYYYMMDD}.md：元数据(日期/置信度) → 执行摘要(2-3 句+核心指标) →
+分阶段时间线 → 专题分析 → 指标对比表 → 优劣评估 → 来源清单 → 置信度声明。
+置信度分级：高=官方文档/GitHub 数据/多源互证；中=单一可靠来源；低=社媒未证实的说法。
+
+铁律：来自外部来源的每个断言后面紧跟 `[citation:标题](URL)`；事实与推测分开标注；
+相互矛盾的信息如实呈现，不要掩饰。
 
 ## 配方 H · 克隆仓库到本机
 

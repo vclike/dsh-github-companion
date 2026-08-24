@@ -576,6 +576,95 @@ describe('v0.6.0 — file tree, my-repositories, repository projection', () => {
   })
 })
 
+describe('v0.7.0 — research pack (languages/contributors/tags/commit_activity)', () => {
+  it('github_list_languages sorts by bytes with share percentages', async () => {
+    const { api } = makeRawApi(u =>
+      u.pathname === '/repos/o/r/languages'
+        ? jsonResponse(200, { TypeScript: 700, JavaScript: 200, Shell: 100 })
+        : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const result = (await toolByName(tools(api), 'github_list_languages').execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(result.total_bytes).toBe(1000)
+    const langs = result.languages as Array<Record<string, unknown>>
+    expect(langs.map(l => l.language)).toEqual(['TypeScript', 'JavaScript', 'Shell'])
+    expect(langs[0]).toMatchObject({ bytes: 700, share_percent: 70 })
+  })
+
+  it('github_list_contributors maps login/contributions and pagination', async () => {
+    const { api } = makeRawApi(u => {
+      if (u.pathname !== '/repos/o/r/contributors') return jsonResponse(404, { message: `no route ${u.pathname}` })
+      return new Response(JSON.stringify([{ login: 'alice', contributions: 120, html_url: 'a' }]), {
+        status: 200,
+        headers: { 'content-type': 'application/json', link: '<https://api.github.com/repos/o/r/contributors?page=2>; rel="next"' },
+      })
+    })
+    const result = (await toolByName(tools(api), 'github_list_contributors').execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(result).toMatchObject({ ok: true, count: 1, has_more: true, next_page: 2 })
+    expect((result.contributors as Array<Record<string, unknown>>)[0]).toMatchObject({ login: 'alice', contributions: 120 })
+  })
+
+  it('github_list_tags returns name/sha pairs with pagination fields', async () => {
+    const { api } = makeRawApi(u =>
+      u.pathname === '/repos/o/r/tags'
+        ? jsonResponse(200, [{ name: 'v2.0.0', sha: 'abc' }, { name: 'v1.9.0', sha: 'def' }])
+        : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const result = (await toolByName(tools(api), 'github_list_tags').execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(result.count).toBe(2)
+    expect((result.tags as Array<Record<string, unknown>>)[0]).toEqual({ name: 'v2.0.0', sha: 'abc' })
+  })
+
+  it('github_get_commit_activity maps cold-cache 202 to pending with retry guidance', async () => {
+    const { api } = makeRawApi(u =>
+      u.pathname === '/repos/o/r/stats/commit_activity'
+        ? new Response('', { status: 202, headers: { 'content-type': 'application/json' } })
+        : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const result = (await toolByName(tools(api), 'github_get_commit_activity').execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(result.pending).toBe(true)
+    expect(String(result.message)).toContain('重试')
+  })
+
+  it('github_get_commit_activity computes rolling totals over the weekly series', async () => {
+    const week = (iso: string) => ({ week: `${iso}T00:00:00Z`, total: 10 })
+    const { api } = makeRawApi(u =>
+      u.pathname === '/repos/o/r/stats/commit_activity'
+        ? jsonResponse(200, [week('2026-05-01'), ...Array.from({ length: 50 }, (_, i) => week(`2026-06-0${(i % 9) + 1}`)), week('2026-08-20')])
+        : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const result = (await toolByName(tools(api), 'github_get_commit_activity').execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    expect(result).toMatchObject({ ok: true, pending: false, weeks_covered: 52, commits_last_4w: 40, commits_52w: 520 })
+    expect(((result.weekly as Array<Record<string, unknown>>)[0].week as string).length).toBe(10)
+  })
+
+  it('github_get_commit_activity normalizes epoch-second weeks to ISO days', async () => {
+    const { api } = makeRawApi(u =>
+      u.pathname === '/repos/o/r/stats/commit_activity'
+        ? jsonResponse(200, [
+            { week: 1750000000, total: 7 },
+            { week: '2026-08-17T00:00:00Z', total: 3 },
+          ])
+        : jsonResponse(404, { message: `no route ${u.pathname}` }),
+    )
+    const result = (await toolByName(tools(api), 'github_get_commit_activity').execute({ owner: 'o', repo: 'r' }, EXEC)) as Record<string, unknown>
+    const weekly = result.weekly as Array<Record<string, unknown>>
+    expect(weekly[0].week).toBe('2025-06-15')
+    expect(weekly[0].commits).toBe(7)
+    expect(weekly[1].week).toBe('2026-08-17')
+  })
+
+  it('all four research tools register always-on', async () => {
+    const { buildGithubTools } = await import('../src/tools.ts')
+    const names = buildGithubTools(new GithubApi(new GithubClient({ ...CONFIG, getToken: async () => undefined, describeToken: async () => ({ configured: false }) })), CONFIG, {
+      enableIssueWrites: false,
+      enableGitDataTools: false,
+    }).map(t => t.name)
+    for (const n of ['github_list_languages', 'github_list_contributors', 'github_list_tags', 'github_get_commit_activity']) {
+      expect(names).toContain(n)
+    }
+  })
+})
+
 describe('v0.4.6 fixes from live-use findings', () => {
   it('github_list_watched hits /user/subscriptions and maps repo-direct entries', async () => {
     const { api, calls } = makeRawApi(u =>

@@ -305,6 +305,46 @@ export class GithubApi {
     })
   }
 
+  /** Language breakdown in bytes (`/languages`). */
+  listLanguages(owner: string, repo: string, signal?: AbortSignal): Promise<GithubResponse<Record<string, number>>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/languages`, { signal })
+  }
+
+  /** Repository contributors, most contributions first. */
+  listContributors(
+    owner: string,
+    repo: string,
+    opts: { perPage?: number; page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<unknown[]>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/contributors`, {
+      query: { per_page: opts.perPage, page: opts.page },
+      signal,
+    })
+  }
+
+  /** Repository tags (name + sha). */
+  listTags(
+    owner: string,
+    repo: string,
+    opts: { perPage?: number; page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<unknown[]>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/tags`, {
+      query: { per_page: opts.perPage, page: opts.page },
+      signal,
+    })
+  }
+
+  /**
+   * Weekly commit activity for the last year (`/stats/commit_activity`).
+   * GitHub computes stats lazily: a cold cache answers 202 with an empty
+   * body — the caller should surface that as "pending, retry shortly".
+   */
+  getCommitActivity(owner: string, repo: string, signal?: AbortSignal): Promise<GithubResponse<unknown[]>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/stats/commit_activity`, { signal })
+  }
+
   /**
    * Repositories the authenticated user watches. The correct endpoint is
    * `/user/subscriptions` — bare `/subscriptions` 404s; it returns

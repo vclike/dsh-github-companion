@@ -53,7 +53,7 @@ Two cordis plugins in one package:
 | `dsh-plugin-github` | `github-tools` | Registers GitHub REST tools on `ctx.tools` |
 | `dsh-plugin-github/gate` | `github-permission-gate` | Example `tools/pre-execute` permission gate scoped to `github_*` tools |
 
-### Tools (29 total, registered per switches)
+### Tools (33 total, registered per switches)
 
 **Read / discovery** — always on:
 `github_get_me`, `github_get_repository`, `github_get_file_contents`,
@@ -62,7 +62,9 @@ Two cordis plugins in one package:
 `github_list_releases`, `github_latest_release`, `github_list_starred`,
 `github_list_forks`, `github_list_watched`, `github_list_notifications`,
 `github_get_file_tree` (one-call recursive directory tree),
-`github_list_my_repositories` (the only list that includes your own private repos)
+`github_list_my_repositories` (the only list that includes your own private repos),
+`github_list_languages`, `github_list_contributors`, `github_list_tags`,
+`github_get_commit_activity` (research signals incl. lazy-computed stats handling)
 
 **Issue writes** — switchable (`enableIssueWrites`, default on):
 `github_create_issue`, `github_update_issue`, `github_add_issue_comment`
