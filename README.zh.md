@@ -215,7 +215,7 @@ dsh plugin add <你的检出目录>/dsh-plugin-github/dsh-github-guide
       config:
         mode: writes                     # off | writes | all
         action: ask                      # ask（走审批服务）| deny
-        excludeTools: []                 # 免除门控的精确工具名
+        excludeTools: [github_search_code, …]  # 免除门控的精确工具名（0.8.0 起默认 11 项作者配置）
 ```
 
 ## 开发

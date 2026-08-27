@@ -246,7 +246,7 @@ repo pushes, `already_exists` handling, and why public repos are out of scope.
       config:
         mode: writes                     # off | writes | all
         action: ask                      # ask (approval service) | deny
-        excludeTools: []                 # exact tool names exempt from gating
+        excludeTools: [github_search_code, …]  # exempt from gating (11-tool author default since 0.8.0)
 ```
 
 ## Development

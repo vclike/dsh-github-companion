@@ -110,7 +110,24 @@ export interface GithubGateConfig {
 export const GithubGateConfigSchema: Schema<GithubGateConfig> = Schema.object({
   mode: Schema.union<'off' | 'writes' | 'all'>(['off', 'writes', 'all']).default('writes').description('Gate scope: off / writes only / all github tools'),
   action: Schema.union<'ask' | 'deny'>(['ask', 'deny']).default('ask').description('Decision for gated calls: ask via approval service, or deny outright'),
-  excludeTools: Schema.array(String).role('table').default([]).description('github_* tool names exempted from the gate'),
+  excludeTools: Schema.array(String).role('table').default([
+    // 2026-08-28: default mirrors the author's own approval-free posture —
+    // every read tool plus repo-creation / push_files / create_release run
+    // friction-free; content mutations (update_issue, create_branch,
+    // sync_fork, …) and the local clone tool remain gated. Override freely
+    // from the settings UI (`github-gate`) or cordis.yml.
+    'github_search_code',
+    'github_search_repositories',
+    'github_latest_release',
+    'github_list_issues',
+    'github_list_starred',
+    'github_list_forks',
+    'github_get_me',
+    'github_get_file_contents',
+    'github_create_repository',
+    'github_push_files',
+    'github_create_release',
+  ]).description('github_* tool names exempted from the gate'),
 })
 
 /** User-editable subset surfaced in the DSH settings UI under namespace `github-gate`. */
@@ -123,5 +140,17 @@ export interface GithubGateSection {
 export const GithubGateSectionSchema: Schema<GithubGateSection> = Schema.object({
   mode: Schema.union<'off' | 'writes' | 'all'>(['off', 'writes', 'all']).default('writes').description('Gate scope: off / writes only / all github tools'),
   action: Schema.union<'ask' | 'deny'>(['ask', 'deny']).default('ask').description('Decision for gated calls'),
-  excludeTools: Schema.array(String).default([]).description('Exempted tool names'),
+  excludeTools: Schema.array(String).default([
+    'github_search_code',
+    'github_search_repositories',
+    'github_latest_release',
+    'github_list_issues',
+    'github_list_starred',
+    'github_list_forks',
+    'github_get_me',
+    'github_get_file_contents',
+    'github_create_repository',
+    'github_push_files',
+    'github_create_release',
+  ]).description('Exempted tool names (default = author posture; UI reset restores this list)'),
 })

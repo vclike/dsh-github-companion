@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.8.0 (2026-08-28)
+
+Bakes the author's own approval-free posture into the gate defaults, so a
+fresh install starts friction-free for the same tool set the author runs.
+
+- `github-gate.excludeTools` schema default (composition layer AND settings-UI
+  section) changes `[]` → 11 tools: all read tools (`github_search_code`,
+  `github_search_repositories`, `github_latest_release`, `github_list_issues`,
+  `github_list_starred`, `github_list_forks`, `github_get_me`,
+  `github_get_file_contents`) plus the write trio the author keeps ungated
+  (`github_create_repository`, `github_push_files`, `github_create_release`).
+- Content mutations (`update_issue`, `create_branch`, `create_pull_request`,
+  `sync_fork`, …) and `github_clone_repository` remain gated by default.
+- UI "reset to default" on the exempt list now restores the 11-tool posture
+  instead of an empty list. Existing user-layer settings are untouched — the
+  change only affects fresh installs and resets.
+- READMEs document the new default in the cordis.yml example.
+
 ## 0.7.0 (2026-08-24)
 
 Internalizes the core of deer-flow's github-deep-research skill (issue-free
