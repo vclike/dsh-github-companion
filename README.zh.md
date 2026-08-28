@@ -147,7 +147,9 @@ Fine-grained tokens）：
   `workspaceRoot`（**默认克隆目录**——克隆落点优先级：当前会话的工作区 → 此目录 →
   询问；目录不存在时自动创建。agent 经 `github_get_me` 读取该路径与状态）、
   `proxyUrl`（访问 api.github.com 的可选 HTTP(S) 代理
-  ——Node 的 fetch 不读系统代理，需要时在此显式填写；改动实时生效）
+  ——Node 的 fetch 不读系统代理，需要时在此显式填写；改动实时生效）、
+  **Actions 成本防护**开关 `actionsGuardEnabled` + `actionsGuardTagCooldownMinutes`
+  （见下文 [Actions 成本防护](#actions-成本防护v081)）
 - `github-gate`：`mode`（`off|writes|all`）、`action`（`ask|deny`）、`excludeTools`
   （设置卡片以胶囊形式增删，附常用只读工具建议）
 
@@ -163,6 +165,8 @@ UI——每个设置区块都是客户端插件通过 `settings.section` 座位�
 ```yaml
 github-tools:
   enableGitDataTools: true
+  actionsGuardEnabled: true            # 默认 true
+  actionsGuardTagCooldownMinutes: 30   # 默认 30，0 = 关闭
 github-gate:
   mode: all
 ```
@@ -192,6 +196,57 @@ dsh plugin add <你的检出目录>/dsh-plugin-github/dsh-github-guide
 
 装了它的 agent 不会再对匿名限速、空仓推送、重名处理、公开仓边界反复试错。
 
+### Actions 成本防护（v0.8.1）
+
+私有仓的 Actions 分钟由 push 触发的 workflow run 在 `in_progress` 状态消耗，
+**按 job 计费且向上取整**。2026-08-28 的事故展示了烧穿速度：一条配置错误的
+$0 预算把 Actions 锁死，僵尸排队烧掉约 1500 分钟而没干任何活。v0.8.1 起插件
+在其能控制的唯一推送面上加了硬防护：
+
+- **`github_push_files`**：目标仓已有 `in_progress` 的 workflow run 时拒绝，
+  返回 `push_guard_in_progress`（HTTP 409）并列出运行中的 run——往已计费的
+  job 上叠推送，只会浪费已经花掉的分钟。
+- **`github_create_release`**：同样的 in-progress 预检，外加同名 tag 冷却
+  （`release_tag_cooldown`，HTTP 429，默认 30 分钟），防止调试发版流水线时
+  疯狂重打同一个 tag。冷却窗口只在创建成功后计时。
+- **fail-open 设计**：预检 API 自身报错（403/404/网络断）时放行——防护自身
+  故障绝不能阻塞工作。Billing 接口有意不查：细粒度 PAT 在那里是 403，任何
+  基于额度查询的熔断都是假防护。真正的断路器是 GitHub 侧的 **停用预算**
+  （作者自用 $20/月 Actions 预算；推理过程见配套技能）。
+
+配置方式（设置界面 `github-tools` 命名空间，或 `~/.dsh/settings.yaml` 用户层）：
+
+```yaml
+github-tools:
+  actionsGuardEnabled: true            # 默认 true
+  actionsGuardTagCooldownMinutes: 30   # 默认 30，0 = 关闭
+```
+
+`actionsGuardRefuseOnInProgress`（默认 true）仅组合层可调。**本地 `git push`
+完全不经过插件进程**，无法被拦截——这层防护请安装下面的配套技能补齐。
+
+### 配套实践技能（用户级，跨工作区）
+
+仓库内 `skill/dsh-github-companion/` 是一个**用户级技能**——复制到
+`~/.dsh/skills/dsh-github-companion` 后所有 DSH 工作区自动加载（不像会话
+记忆，它不随工作区切换丢失，也不随插件升级被覆盖）：
+
+```
+dsh-github-companion/
+├── SKILL.md                        # 路由器：按任务告诉你读哪个分册
+└── references/
+    ├── cost-discipline.md          # 任何 push/tag/Release 之前读
+    ├── release-flows.md            # 发版链路、tag 重点火、草稿
+    ├── incident-playbook.md        # CI 红 / run 卡死 / 预算报错
+    └── repo-hardening.md           # 新私有仓的 CI 加固模板
+```
+
+它补充插件导出的 `dsh-github-usage` 技能（工具地图与配方）管不到的部分：
+**成本纪律**（一轮一推、禁 `push && push --tags`、先绿后 tag）、**发版链路**
+（`publish-self` → `create-tag` → 自动 Release）、**故障手册**（npm ci 无限
+peer 循环、预算锁死、卡死 run 取消）与 **CI 加固模板**。SKILL.md 只是路由
+器——agent 按任务只读需要的分册，上下文最小化。
+
 ## 配置（cordis.yml 插入行）
 
 ```yaml
@@ -208,6 +263,9 @@ dsh plugin add <你的检出目录>/dsh-plugin-github/dsh-github-guide
         enableIssueWrites: true          # 组合层默认（设置界面可覆盖）
         enableGitDataTools: false        # 组合层默认（设置界面可覆盖）
         enableRepoCreation: false        # 组合层默认（设置界面可覆盖）
+        actionsGuardEnabled: true        # Actions 成本防护的组合层默认
+        actionsGuardRefuseOnInProgress: true  # 仅组合层（无 UI 开关）
+        actionsGuardTagCooldownMinutes: 30    # 同名 tag 重建冷却
         workspaceRoot: ''                # 克隆仓库的本地根目录（留空 = 每次询问）
         proxyUrl: ''                     # api.github.com 的可选 HTTP(S) 代理
     - id: github-permission-gate

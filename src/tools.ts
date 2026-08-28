@@ -20,6 +20,7 @@ import { defineTool, type JsonValue, type ToolDefinition } from '@deepseek-ai/ds
 import { cloneRepositoryTool } from './clone.ts'
 import type { GithubApi, IssueItem, PullRequestItem, ReleaseItem } from './api.ts'
 import type { GithubToolsConfig } from './config.ts'
+import { DEFAULT_GUARD_OPTIONS, TagCooldown, makeInProgressChecker, type ActionsGuardOptions, type InProgressChecker } from './guard.ts'
 
 /** One canonical tool-result object: JSON-safe keys only. */
 export type Value = Record<string, JsonValue>
@@ -1021,7 +1022,7 @@ function createOrUpdateFileTool(api: GithubApi): ToolDefinition {
   })
 }
 
-function pushFilesTool(api: GithubApi): ToolDefinition {
+function pushFilesTool(api: GithubApi, checkInProgress: InProgressChecker): ToolDefinition {
   return defineTool({
     name: 'github_push_files',
     description: 'Commit MULTIPLE files to a branch as a single commit (atomic tree/commit/ref update).',
@@ -1053,6 +1054,14 @@ function pushFilesTool(api: GithubApi): ToolDefinition {
       const invalid = args.files.findIndex(file => typeof file.path !== 'string' || typeof file.text !== 'string')
       if (invalid >= 0) {
         return { ok: false, status: 400, message: `files[${invalid}] must carry both 'path' and 'text' strings.` }
+      }
+      // Actions-cost guard (v0.8.1): a push that stacks onto running jobs
+      // wastes already-billed minutes. Fail-open by design — see guard.ts.
+      const verdict = await checkInProgress(args.owner, args.repo, exec.signal)
+      if (verdict.blocked) {
+        // `running` is a JSON-safe summary; the tool DSL's Value type just
+        // needs the cast (output schema is additionalProperties: true).
+        return { ok: false, status: 409, code: verdict.code, message: verdict.message, running: verdict.runs as unknown as JsonValue }
       }
       const files = args.files.map(file => ({ path: file.path as string, text: file.text as string }))
       const result = await api.pushFiles(args.owner, args.repo, args.branch, files, args.message, exec.signal)
@@ -1205,7 +1214,7 @@ function latestReleaseTool(api: GithubApi): ToolDefinition {
   })
 }
 
-function createReleaseTool(api: GithubApi): ToolDefinition {
+function createReleaseTool(api: GithubApi, checkInProgress: InProgressChecker, tagCooldown: TagCooldown): ToolDefinition {
   return defineTool({
     name: 'github_create_release',
     description:
@@ -1226,6 +1235,18 @@ function createReleaseTool(api: GithubApi): ToolDefinition {
     async execute(args, exec): Promise<Value> {
       const tagName = typeof args.tag_name === 'string' ? args.tag_name.trim() : ''
       if (!tagName) return { ok: false, status: 400, message: "tag_name is required (e.g. 'v1.0.0')." }
+      // Actions-cost guard (v0.8.1): creating a tag fires the release
+      // workflow, so the same in-progress stacking check as push_files
+      // applies; plus a cooldown against rapid re-firing of the same tag.
+      const cooldownKey = `${String(args.owner)}/${String(args.repo)}#${tagName}`
+      const cooldownVerdict = tagCooldown.checkBlocked(cooldownKey)
+      if (cooldownVerdict.blocked) {
+        return { ok: false, status: 429, code: cooldownVerdict.code, message: cooldownVerdict.message }
+      }
+      const verdict = await checkInProgress(String(args.owner), String(args.repo), exec.signal)
+      if (verdict.blocked) {
+        return { ok: false, status: 409, code: verdict.code, message: verdict.message, running: verdict.runs as unknown as JsonValue }
+      }
       const response = await api.createRelease(
         String(args.owner),
         String(args.repo),
@@ -1261,6 +1282,8 @@ function createReleaseTool(api: GithubApi): ToolDefinition {
         }
       }
       const shaped = shapeRelease(response.data)
+      // Only a successful creation consumes the cooldown window.
+      tagCooldown.mark(cooldownKey)
       return {
         ok: true,
         ...shaped,
@@ -1514,9 +1537,23 @@ export function buildGithubTools(
     enableCloneTools?: boolean
     /** User-layer override for the workspace convention (wins over config). */
     workspaceRoot?: string
+    /** User-layer Actions-cost-guard switch (wins over config). */
+    actionsGuardEnabled?: boolean
+    /** User-layer tag cooldown override in minutes (wins over config). */
+    actionsGuardTagCooldownMinutes?: number
   },
 ): ToolDefinition[] {
   const effectiveWorkspaceRoot = section.workspaceRoot?.trim() || config.workspaceRoot
+  // Actions-cost guard (v0.8.1): user-layer switch wins, composition config
+  // seeds the default, hard-coded fallbacks keep standalone tests honest.
+  const guard: ActionsGuardOptions = {
+    enabled: section.actionsGuardEnabled ?? config.actionsGuardEnabled ?? DEFAULT_GUARD_OPTIONS.enabled,
+    refuseOnInProgress: config.actionsGuardRefuseOnInProgress ?? DEFAULT_GUARD_OPTIONS.refuseOnInProgress,
+    tagCooldownMinutes:
+      section.actionsGuardTagCooldownMinutes ?? config.actionsGuardTagCooldownMinutes ?? DEFAULT_GUARD_OPTIONS.tagCooldownMinutes,
+  }
+  const checkInProgress = makeInProgressChecker(api, guard)
+  const tagCooldown = new TagCooldown(guard)
   const tools = [
     getMeTool(api, effectiveWorkspaceRoot),
     getRepositoryTool(api),
@@ -1552,9 +1589,9 @@ export function buildGithubTools(
       getPullRequestTool(api),
       createBranchTool(api),
       createOrUpdateFileTool(api),
-      pushFilesTool(api),
+      pushFilesTool(api, checkInProgress),
       createPullRequestTool(api),
-      createReleaseTool(api),
+      createReleaseTool(api, checkInProgress, tagCooldown),
       syncForkTool(api),
     )
   }

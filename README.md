@@ -170,9 +170,11 @@ Both plugins register settings namespaces rendered by the DSH settings UI:
 - `github-tools`: `enableIssueWrites`, `enableGitDataTools`, `enableRepoCreation`,
   `workspaceRoot` (**default clone directory** — clone destination priority:
   the current session's workspace → this directory → ask; created on first
-  clone. Surfaced to the agent via `github_get_me`), and
-  `proxyUrl` (optional HTTP(S) proxy for api.github.com — Node's fetch ignores
-  system proxy settings, so set this explicitly if you need one; applies live)
+  clone), `proxyUrl` (optional HTTP(S) proxy for api.github.com — Node's fetch
+  ignores system proxy settings, so set this explicitly if you need one;
+  applies live), and the **Actions cost guard** switches
+  `actionsGuardEnabled` + `actionsGuardTagCooldownMinutes` (see
+  [Actions cost guard](#actions-cost-guard-v081))
 - `github-gate`: `mode` (`off|writes|all`), `action` (`ask|deny`), `excludeTools`
   (managed as removable pills in the settings card, with common read-only
   suggestions)
@@ -223,6 +225,66 @@ dsh plugin add <your-checkout>/dsh-plugin-github/dsh-github-guide
 Agents that have it loaded stop guessing about anonymous rate limits, empty
 repo pushes, `already_exists` handling, and why public repos are out of scope.
 
+### Actions cost guard (v0.8.1)
+
+Private-repo Actions minutes are consumed by push-triggered workflow runs in
+the `in_progress` state, billed per job with round-up. The 2026-08-28
+incident showed how fast that burns: a misconfigured $0 budget locked Actions
+and zombie-queued ~1500 minutes without doing any work. Since v0.8.1 the
+plugin hard-guards the only push surface it controls:
+
+- **`github_push_files`**: refuses with `push_guard_in_progress` (HTTP 409)
+  and a list of running jobs when the target repository already has
+  `in_progress` workflow runs. Stacking a push onto billed jobs wastes
+  minutes that are already spent.
+- **`github_create_release`**: the same in-progress check, plus a per-tag
+  cooldown (`release_tag_cooldown`, HTTP 429, default 30 minutes) that stops
+  rapid re-firing of the same tag while debugging a release pipeline. The
+  window is consumed only by a successful creation.
+- **Fail-open by design**: if the pre-flight API check itself errors
+  (403/404/transport), the push proceeds — a broken guard must never wedge
+  work. Billing endpoints are deliberately NOT consulted: fine-grained PATs
+  get 403 there, so quota-based gating would be fake protection. The real
+  circuit breaker is a GitHub-side **stop-usage budget** (the author runs a
+  $20/month Actions budget; see the companion skill for the reasoning).
+
+Configure via the settings UI (`github-tools` namespace) or `~/.dsh/settings.yaml`:
+
+```yaml
+github-tools:
+  actionsGuardEnabled: true            # default true
+  actionsGuardTagCooldownMinutes: 30   # default 30, 0 = off
+```
+
+`actionsGuardRefuseOnInProgress` (default true) is composition-layer only.
+Local `git push` bypasses the plugin process entirely and cannot be
+intercepted — for that surface, install the companion skill below.
+
+### Companion discipline skill (user-level, cross-workspace)
+
+`skill/dsh-github-companion/` in this repository is a **user-level skill** —
+copy it to `~/.dsh/skills/dsh-github-companion` and every DSH workspace picks
+it up (unlike session memory, it survives workspace switches and plugin
+upgrades):
+
+```
+dsh-github-companion/
+├── SKILL.md                        # router: which file to read per task
+└── references/
+    ├── cost-discipline.md          # read before ANY push/tag/release
+    ├── release-flows.md            # release chains, tag re-firing, drafts
+    ├── incident-playbook.md        # CI red / hung runs / budget errors
+    └── repo-hardening.md           # CI template for new private repos
+```
+
+It complements the plugin-exported `dsh-github-usage` skill (tool map &
+recipes) with what the plugin cannot enforce: cost discipline (one push per
+round, no `push && push --tags`, CI-green-before-tag), release chains
+(`publish-self` → `create-tag` → auto-release), an incident playbook (npm ci
+infinite peer loop, budget lockouts, hung-run cancellation), and the CI
+hardening template. The SKILL.md is a router — agents read only the file
+their task needs, keeping context small.
+
 ## Configuration (cordis.yml insert row)
 
 ```yaml
@@ -239,6 +301,9 @@ repo pushes, `already_exists` handling, and why public repos are out of scope.
         enableIssueWrites: true          # composition default (settings UI can override)
         enableGitDataTools: false        # composition default (settings UI can override)
         enableRepoCreation: false        # composition default (settings UI can override)
+        actionsGuardEnabled: true        # composition default for the Actions-cost guard
+        actionsGuardRefuseOnInProgress: true  # guard layer only (no UI switch)
+        actionsGuardTagCooldownMinutes: 30    # same-tag re-create cooldown
         workspaceRoot: ''                # local root for cloned repos (empty = ask each time)
         proxyUrl: ''                     # optional HTTP(S) proxy for api.github.com
     - id: github-permission-gate

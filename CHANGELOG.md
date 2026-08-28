@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.8.1 (2026-08-28)
+
+Actions-cost guard: stop burning private-repo Actions minutes at the only
+surface the plugin controls. Motivated by the 2026-08-28 incident where a
+$0 stop budget locked Actions and zombie-queued ~1500 minutes of the monthly
+quota without doing any work.
+
+- **`github_push_files` pre-flight**: refuses (`push_guard_in_progress`, 409)
+  when the target repository already has `in_progress` workflow runs, listing
+  them — a push that stacks onto billed jobs wastes already-spent minutes.
+- **`github_create_release` pre-flight**: same in-progress check, plus a
+  per-tag cooldown (`release_tag_cooldown`, 429; default 30 minutes) against
+  rapid re-firing of the same tag while debugging. The cooldown window is
+  consumed only by a successful creation.
+- **Fail-open by design**: a broken pre-flight (403/404/transport error)
+  never blocks work — the guard only refuses when it can *prove* runs are
+  active. Billing APIs are intentionally NOT consulted: fine-grained PATs
+  get 403 there, so any quota-based gate would be fake protection.
+- **Config** (settings UI `github-tools` namespace or `~/.dsh/settings.yaml`
+  user layer): `actionsGuardEnabled` (default true),
+  `actionsGuardTagCooldownMinutes` (default 30, 0 = off); composition layer
+  additionally seeds `actionsGuardRefuseOnInProgress` (default true).
+- **Companion skill ships with the repo** (`skill/dsh-github-companion/`):
+  copy it to `~/.dsh/skills/dsh-github-companion` for cross-workspace agent
+  discipline — cost rules, release flows, incident playbook, CI hardening
+  template, organized as a router with per-task reference files.
+- 9 new tests (guard refusal, fail-open, user-layer opt-out, cooldown
+  windows); 81 total green.
+
 ## 0.8.0 (2026-08-28)
 
 Bakes the author's own approval-free posture into the gate defaults, so a

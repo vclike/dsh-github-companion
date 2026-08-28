@@ -99,6 +99,24 @@ export class GithubApi {
     return this.client.request(`/repos/${enc(owner)}/${enc(repo)}`, { signal })
   }
 
+  /**
+   * List workflow runs for a repository, optionally filtered by status
+   * (`in_progress`, `queued`, …). Used by the Actions-cost guard before
+   * push-shaped tools fire — a push that stacks onto running jobs wastes
+   * already-billed minutes (the 2026-08-28 zombie-queue incident).
+   */
+  listActionRuns(
+    owner: string,
+    repo: string,
+    opts: { status?: string; perPage?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<GithubResponse<unknown>> {
+    return this.client.request(`/repos/${enc(owner)}/${enc(repo)}/actions/runs`, {
+      query: { status: opts.status, per_page: opts.perPage },
+      signal,
+    })
+  }
+
   listCommits(
     owner: string,
     repo: string,

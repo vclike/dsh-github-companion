@@ -44,6 +44,12 @@ export interface GithubToolsConfig {
    * set this explicitly.
    */
   proxyUrl: string
+  /** Composition default for the settings-UI Actions-cost-guard switch. */
+  actionsGuardEnabled: boolean
+  /** Composition default: refuse pushes while Actions runs are in progress. */
+  actionsGuardRefuseOnInProgress: boolean
+  /** Composition default: cooldown (minutes) before the same tag may be re-created via create_release. */
+  actionsGuardTagCooldownMinutes: number
 }
 
 export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object({
@@ -61,6 +67,9 @@ export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object(
   gitTimeoutMs: Schema.number().default(300_000).min(5_000).max(1_800_000).description('Timeout for one git clone subprocess in ms'),
   workspaceRoot: Schema.string().default('').description('Local root directory for cloned/checked-out repositories (empty = no convention)'),
   proxyUrl: Schema.string().default('').description('Optional HTTP(S) proxy for GitHub API traffic (e.g. http://127.0.0.1:7890)'),
+  actionsGuardEnabled: Schema.boolean().default(true).description('Default for the settings-UI Actions-cost-guard switch (push_files / create_release pre-flight)'),
+  actionsGuardRefuseOnInProgress: Schema.boolean().default(true).description('Default: refuse pushes while Actions runs are in progress (queued jobs stack and burn minutes)'),
+  actionsGuardTagCooldownMinutes: Schema.number().default(30).min(0).max(1_440).description('Cooldown in minutes before the same tag may be re-created via create_release'),
 })
 
 /** User-editable subset surfaced in the DSH settings UI under namespace `github-tools`. */
@@ -80,6 +89,15 @@ export interface GithubToolsSection {
   /** Optional HTTP(S) proxy for GitHub API traffic (empty = direct). */
   proxyUrl: string
   /**
+   * Actions-cost guard: before github_push_files / github_create_release fire
+   * (both trigger Actions minutes on private repos), refuse when runs are
+   * already in progress, and rate-limit repeated tag creation. Fail-open on
+   * API errors — a broken guard never blocks work.
+   */
+  actionsGuardEnabled: boolean
+  /** Cooldown in minutes before the same tag may be re-created (0 = off). */
+  actionsGuardTagCooldownMinutes: number
+  /**
    * Inline PAT (write-only in the UI). Empty/absent falls back to the
    * credential reference. Declared WITHOUT a default so the redaction
    * sidecar reports `set: false` until the user actually saves one.
@@ -94,6 +112,8 @@ export const GithubToolsSectionSchema: Schema<GithubToolsSection> = Schema.objec
   enableCloneTools: Schema.boolean().default(false).description('Register github_clone_repository (local clone with token bridged to ONE git subprocess)'),
   workspaceRoot: Schema.string().default('').description('Local root directory for cloned/checked-out repositories'),
   proxyUrl: Schema.string().default('').description('Optional HTTP(S) proxy for GitHub API traffic'),
+  actionsGuardEnabled: Schema.boolean().default(true).description('Refuse push_files / create_release while Actions runs are in progress, and rate-limit repeated tag creation'),
+  actionsGuardTagCooldownMinutes: Schema.number().default(30).min(0).max(1_440).description('Cooldown in minutes before the same tag may be re-created (0 = off)'),
   token: Schema.string().role('secret').description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),
 })
 

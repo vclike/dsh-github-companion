@@ -41,6 +41,8 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
       enableCloneTools: config.enableCloneTools,
       workspaceRoot: config.workspaceRoot,
       proxyUrl: config.proxyUrl,
+      actionsGuardEnabled: config.actionsGuardEnabled,
+      actionsGuardTagCooldownMinutes: config.actionsGuardTagCooldownMinutes,
     },
     applies: 'live',
   })
