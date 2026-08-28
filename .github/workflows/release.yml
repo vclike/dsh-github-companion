@@ -33,17 +33,17 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      # NOTE: no `cache: npm` — same stall correlation as ci.yml (2026-08-28).
+          cache: npm
 
+      # Same root cause as ci.yml — fixed via repo .npmrc (legacy-peer-deps).
       - name: Install dependencies
-        timeout-minutes: 4
-        run: npm ci --registry=https://registry.npmmirror.com --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
+        timeout-minutes: 5
+        run: npm ci
 
-      # Fallback: fresh process on the official registry path.
-      - name: Retry install via official registry
+      - name: Retry install
         if: failure()
-        timeout-minutes: 4
-        run: npm ci --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
+        timeout-minutes: 5
+        run: npm ci
 
       - name: Verify (typecheck + test + build)
         run: |
