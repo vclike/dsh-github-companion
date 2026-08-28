@@ -35,6 +35,15 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        timeout-minutes: 4
+        run: npm ci
+
+      # npm ci on hosted runners intermittently wedges (~2026-08-28, 2 of 3
+      # batches hung >8 min with zero output). A step-level timeout converts a
+      # hang into a failure, and a fresh npm ci process usually clears it.
+      - name: Retry install (transient registry hang)
+        if: failure()
+        timeout-minutes: 4
         run: npm ci
 
       - name: Typecheck

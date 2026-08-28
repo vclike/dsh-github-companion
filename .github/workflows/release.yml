@@ -36,6 +36,14 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        timeout-minutes: 4
+        run: npm ci
+
+      # Same rationale as ci.yml: hosted-runner npm ci intermittently wedges;
+      # step timeout + fresh retry clears it without burning the whole job.
+      - name: Retry install (transient registry hang)
+        if: failure()
+        timeout-minutes: 4
         run: npm ci
 
       - name: Verify (typecheck + test + build)
