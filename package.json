@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-github",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "DeepSeek Harness plugin: GitHub REST tools (repos/search/issues/PRs/git-data) with credential-seam token resolution and a companion permission-gate example.",
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,11 @@
       "default": "./lib/gate.js"
     },
     "./package.json": "./package.json",
-    "./client": "./client.js"
+    "./client": "./client.js",
+    "./skill": {
+      "types": "./lib/types/skill.d.ts",
+      "default": "./lib/skill.js"
+    }
   },
   "files": [
     "lib",
@@ -25,7 +29,8 @@
     "README.md",
     "README.zh.md",
     "CHANGELOG.md",
-    "client.js"
+    "client.js",
+    "SKILL.md"
   ],
   "dsh": {
     "bundle": {

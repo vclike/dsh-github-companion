@@ -1,6 +1,0 @@
-# dsh-github-guide bundle patch.
-# `dsh plugin add dsh-github-guide` 会把这行插入目标 profile 的 cordis 配置，
-# 重启后注册 github_* 工具的使用技能（dsh-github-usage）。
-- insert:
-    - id: dsh-github-guide
-      name: dsh-github-guide

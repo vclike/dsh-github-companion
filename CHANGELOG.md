@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.9.0 (2026-08-28)
+
+One bundle, one install: the standalone `dsh-github-guide` bundle (which did
+nothing but register the `dsh-github-usage` skill) is merged into the main
+package. Every install now carries tools + settings + permission gate +
+usage skill in a single bundle row.
+
+- New entry point `dsh-plugin-github/skill` (`src/skill.ts`) registers the
+  `dsh-github-usage` skill from the package-root `SKILL.md` through the
+  `skills` service — same mount pattern as the gate row, same SKILL.md
+  content as the former guide.
+- `cordis.patch.yml` gains a third insert row (`dsh-github-usage` →
+  `dsh-plugin-github/skill`). The tools and gate entries are untouched — a
+  profile without the `skills` service at worst loses the skill, never the
+  tools.
+- **Migration (previously installed guide)**: remove the
+  `dsh-github-guide` row from your profile's bundle list and its
+  `node_modules` link, then restart. Keeping both mounts registers the same
+  skill name twice.
+- The `dsh-github-guide/` subpackage is removed from the repository; the
+  user-level `skill/dsh-github-companion/` is unaffected (it is copied to
+  `~/.dsh/skills/`, not bundled).
+- Verification: 83 unit tests + extended `verify-load.mjs` now asserting
+  the skill entry registers with non-trivial content and a disposer.
+
 ## 0.8.1 (2026-08-28)
 
 Actions-cost guard: stop burning private-repo Actions minutes at the only

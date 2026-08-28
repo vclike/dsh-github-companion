@@ -74,6 +74,7 @@ function makeFakeCtx(loggerName = 'ctx') {
     },
   }
   ctx.__scopes = settingsScopes
+  ctx.__effects = effects
   return ctx
 }
 
@@ -86,6 +87,24 @@ const gate = await import(`${specifier}/gate`)
 if (gate.name !== 'github-permission-gate') fail(`gate name mismatch: ${JSON.stringify(gate.name)}`)
 if (!Array.isArray(gate.inject) || !gate.inject.includes('settings')) fail('gate inject must include settings')
 if (typeof gate.apply !== 'function') fail('gate must export an apply function')
+
+// Skill entry (v0.9.0 merge of dsh-github-guide): registers dsh-github-usage
+// from the package-root SKILL.md through the skills service.
+const skillEntry = await import(`${specifier}/skill`)
+if (skillEntry.name !== 'dsh-github-usage') fail(`skill entry name mismatch: ${JSON.stringify(skillEntry.name)}`)
+if (!Array.isArray(skillEntry.inject) || !skillEntry.inject.includes('skills')) fail('skill inject must include skills')
+if (typeof skillEntry.apply !== 'function') fail('skill entry must export an apply function')
+const skillCtx = makeFakeCtx('skill')
+skillCtx.skills = {
+  register(definition) {
+    if (definition.name !== 'dsh-github-usage') fail(`skill name mismatch: ${JSON.stringify(definition.name)}`)
+    if (!definition.content || definition.content.length < 1000) fail('skill content missing or too short')
+    if (!definition.description) fail('skill description missing')
+    return () => {}
+  },
+}
+skillEntry.apply(skillCtx)
+if (skillCtx.__effects.length !== 1) fail(`skill registration effect count ${skillCtx.__effects.length} !== 1`)
 
 const configDefaults = main.Config?.({}) ?? {}
 const gateDefaults = gate.Config?.({}) ?? {}
@@ -140,4 +159,4 @@ if (askWrite.kind !== 'ask') fail(`write tool should be gated with ask, got ${as
 const readPass = await preListeners[0]({ callId: 'c', name: 'github_get_me', arguments: {} }, next)
 if (readPass.kind !== 'allow') fail(`read tool should pass through, got ${readPass.kind}`)
 
-console.log(`LOAD OK — tools: ${names.length} (+git-data after flip: ${toolsCtxReal.registerToolCalls.length}), namespaces: ${toolsCtxReal.namespaces.map(n => n.ns).join(', ')}, gate mode: writes→ask`)
+console.log(`LOAD OK — tools: ${names.length} (+git-data after flip: ${toolsCtxReal.registerToolCalls.length}), namespaces: ${toolsCtxReal.namespaces.map(n => n.ns).join(', ')}, gate mode: writes→ask, skill: dsh-github-usage registered`)

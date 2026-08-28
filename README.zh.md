@@ -184,17 +184,12 @@ dsh plugin add <你的检出目录>/dsh-plugin-github   # 或 github:owner/repo#
 然后设置 token；不需要权限门时，可从 profile 的 `cordis.patch.yml` 删掉
 gate 那一行。
 
-### 配套使用技能（推荐）
-
-仓库内的 `dsh-github-guide/` 是一个迷你 bundle，注册按需加载的 agent 技能
-`dsh-github-usage`——能力开关地图、结果约定、令牌权限速查、工作流配方
-（上传项目→私仓）与故障手册。建议一并安装：
-
-```bash
-dsh plugin add <你的检出目录>/dsh-plugin-github/dsh-github-guide
-```
-
-装了它的 agent 不会再对匿名限速、空仓推送、重名处理、公开仓边界反复试错。
+一个 bundle 一步装——v0.9.0 起包内自带按需加载的 agent 技能
+`dsh-github-usage`（能力开关地图、结果约定、令牌权限速查、工作流配方与故障
+手册），取代原先独立的 `dsh-github-guide` bundle。从旧版迁移：删掉 profile
+bundle 清单里的 `dsh-github-guide` 行及其 `node_modules` 链接（技能现在由
+主包以 `dsh-plugin-github/skill` 入口提供）——两个挂载并存会把同名技能注册
+两次。装了它的 agent 不会再对匿名限速、空仓推送、重名处理、公开仓边界反复试错。
 
 ### Actions 成本防护（v0.8.1）
 

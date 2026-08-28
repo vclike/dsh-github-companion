@@ -211,19 +211,16 @@ dsh plugin add <your-checkout>/dsh-plugin-github   # or github:owner/repo#<sha>
 Then set your token and (optionally) trim the gate row from your profile's
 `cordis.patch.yml` if you don't want the permission gate loaded.
 
-### Companion usage skill (recommended)
-
-`dsh-github-guide/` in this repository is a mini bundle that registers an
-on-demand agent skill, `dsh-github-usage` — a capability map, result
-conventions, token prerequisites, workflow recipes (upload project → private
-repo), and a failure playbook. Install it alongside:
-
-```bash
-dsh plugin add <your-checkout>/dsh-plugin-github/dsh-github-guide
-```
-
-Agents that have it loaded stop guessing about anonymous rate limits, empty
-repo pushes, `already_exists` handling, and why public repos are out of scope.
+One bundle, one install — since v0.9.0 the package registers the
+`dsh-github-usage` on-demand agent skill itself (a capability map, result
+conventions, token prerequisites, workflow recipes, and a failure playbook),
+replacing the former standalone `dsh-github-guide` bundle. Migrating from an
+older install: remove the `dsh-github-guide` row from your profile's bundle
+list and its `node_modules` link (the skill now ships inside the main
+package as `dsh-plugin-github/skill`) — keeping both mounts would register
+the same skill name twice. Agents that have it loaded stop guessing about
+anonymous rate limits, empty repo pushes, `already_exists` handling, and why
+public repos are out of scope.
 
 ### Actions cost guard (v0.8.1)
 
