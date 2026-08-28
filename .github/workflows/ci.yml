@@ -36,15 +36,15 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 4
-        run: npm ci
+        run: npm ci --prefer-offline --fetch-timeout=60000 --fetch-retries=2 --fetch-retry-maxtimeout=20000 --loglevel=info
 
-      # npm ci on hosted runners intermittently wedges (~2026-08-28, 2 of 3
-      # batches hung >8 min with zero output). A step-level timeout converts a
-      # hang into a failure, and a fresh npm ci process usually clears it.
-      - name: Retry install (transient registry hang)
+      # npm ci on hosted runners intermittently wedges (~2026-08-28, silent
+      # stalls mid-download). Attempt 1 fast-fails per request; the retry takes
+      # a different network path entirely (npmmirror) with a fresh process.
+      - name: Retry install via mirror (transient registry stall)
         if: failure()
         timeout-minutes: 4
-        run: npm ci
+        run: npm ci --prefer-offline --registry=https://registry.npmmirror.com --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
 
       - name: Typecheck
         run: npm run typecheck

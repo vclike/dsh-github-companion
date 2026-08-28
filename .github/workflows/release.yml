@@ -37,14 +37,14 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 4
-        run: npm ci
+        run: npm ci --prefer-offline --fetch-timeout=60000 --fetch-retries=2 --fetch-retry-maxtimeout=20000 --loglevel=info
 
-      # Same rationale as ci.yml: hosted-runner npm ci intermittently wedges;
-      # step timeout + fresh retry clears it without burning the whole job.
-      - name: Retry install (transient registry hang)
+      # Same rationale as ci.yml: fast-fail attempt 1, then a fresh process on
+      # a different network path (npmmirror).
+      - name: Retry install via mirror (transient registry stall)
         if: failure()
         timeout-minutes: 4
-        run: npm ci
+        run: npm ci --prefer-offline --registry=https://registry.npmmirror.com --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
 
       - name: Verify (typecheck + test + build)
         run: |
