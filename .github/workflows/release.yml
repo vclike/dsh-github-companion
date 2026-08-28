@@ -33,18 +33,17 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
+      # NOTE: no `cache: npm` — same stall correlation as ci.yml (2026-08-28).
 
       - name: Install dependencies
         timeout-minutes: 4
-        run: npm ci --prefer-offline --fetch-timeout=60000 --fetch-retries=2 --fetch-retry-maxtimeout=20000 --loglevel=info
+        run: npm ci --registry=https://registry.npmmirror.com --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
 
-      # Same rationale as ci.yml: fast-fail attempt 1, then a fresh process on
-      # a different network path (npmmirror).
-      - name: Retry install via mirror (transient registry stall)
+      # Fallback: fresh process on the official registry path.
+      - name: Retry install via official registry
         if: failure()
         timeout-minutes: 4
-        run: npm ci --prefer-offline --registry=https://registry.npmmirror.com --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
+        run: npm ci --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
 
       - name: Verify (typecheck + test + build)
         run: |

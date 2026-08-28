@@ -32,19 +32,19 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
-          cache: npm
+      # NOTE: no `cache: npm` — the restored cache entry correlates with the
+      # silent npm ci stalls of 2026-08-28 (attempt-5 log: 475 metadata GETs
+      # at ~35ms via mirror, then a stall right before the tarball phase).
 
       - name: Install dependencies
         timeout-minutes: 4
-        run: npm ci --prefer-offline --fetch-timeout=60000 --fetch-retries=2 --fetch-retry-maxtimeout=20000 --loglevel=info
+        run: npm ci --registry=https://registry.npmmirror.com --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
 
-      # npm ci on hosted runners intermittently wedges (~2026-08-28, silent
-      # stalls mid-download). Attempt 1 fast-fails per request; the retry takes
-      # a different network path entirely (npmmirror) with a fresh process.
-      - name: Retry install via mirror (transient registry stall)
+      # Fallback: fresh process on the official registry path.
+      - name: Retry install via official registry
         if: failure()
         timeout-minutes: 4
-        run: npm ci --prefer-offline --registry=https://registry.npmmirror.com --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
+        run: npm ci --fetch-timeout=60000 --fetch-retries=2 --loglevel=info
 
       - name: Typecheck
         run: npm run typecheck
