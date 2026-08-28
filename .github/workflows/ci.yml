@@ -5,6 +5,11 @@ name: CI
 on:
   push:
     branches: [main]
+    # Docs-only pushes skip CI entirely (2026-08-28 minute discipline)
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '_dev/**'
   pull_request:
     branches: [main]
 
@@ -15,6 +20,8 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Hard cap: a hung npm ci must never bill past 10 minutes (2026-08-28)
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
