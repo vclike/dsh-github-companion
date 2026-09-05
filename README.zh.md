@@ -1,4 +1,4 @@
-# dsh-github-companion
+﻿# dsh-github-companion
 
 DeepSeek Harness 上**完整**的 GitHub 集成包：**33 个原生 agent 工具** + **进程内权限门** + **按需加载的用法技能** + **独立安装的成本纪律 companion skill**——一次装齐。**完全不依赖 `gh` CLI**。
 

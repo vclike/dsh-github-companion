@@ -1,4 +1,4 @@
----
+﻿---
 name: dsh-github-companion
 description: 如何正确驱动已安装的 dsh-github-companion 工具集完成 GitHub 任务。只要会话中可用工具包含 github_get_me / github_search_repositories / github_push_files / github_create_repository 等任何 github_* 工具，或用户提出"上传项目到 GitHub / 建新仓库 / 管理 issue / 研究某个开源项目 / 看某仓库最近更新 / 克隆、检出或下载某个仓库的代码"类需求，先读本技能再动手——它包含能力开关地图、结果约定、权限前置、标准配方和故障速查，能避免反复试错（匿名限速、空仓推失败、重名 422、误建公开仓等）。
 ---

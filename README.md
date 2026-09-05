@@ -1,4 +1,4 @@
-# dsh-github-companion
+﻿# dsh-github-companion
 
 > DeepSeek Harness 插件：AI 操作 GitHub 的完整集成——33 个 REST/GraphQL 工具 + 进程内权限门 + 成本纪律 companion skill，零 gh CLI 依赖。
 >

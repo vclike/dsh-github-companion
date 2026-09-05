@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 ## 1.0.0 (2026-09-05)
 
@@ -66,6 +66,8 @@ travels with the plugin release.
 - Lists the actual safety layers in that posture (fine-grained PAT token scope, `actionsGuardEnabled`, `actionsGuardTagCooldownMinutes`, dsh file sandbox, host audit log) so the agent does not lose track of where the real guardrails live when the gate falls open.
 
 The four `references/*.md` files (cost-discipline, incident-playbook, release-flows, repo-hardening) are unchanged — their facts (the v0.8.1 guard contract, billing reality, CI templates, npm peer-resolve loop) still hold against the v0.9.x runtime.
+
+> **Supersession note**: the v0.4.9 "two-knob" full-access detection (`sandbox danger-full-access AND approval policy never`) is **no longer the rule** as of v0.9.2. v0.9.2 replaced it with `hasNoApprovalChannel(ctx)` — fail-open when the approval channel is missing or `policy === 'never'`, regardless of sandbox mode. v0.4.9's entry is preserved as historical record of the older posture, but the canonical rule is in v0.9.2.
 
 ## 0.9.3 (2026-09-05)
 
@@ -212,8 +214,9 @@ fresh install starts friction-free for the same tool set the author runs.
 
 ## 0.7.0 (2026-08-24)
 
-Internalizes the core of deer-flow's github-deep-research skill (issue-free
-dogfooding follow-up to #2).
+Internalizes the core of deer-flow's github-deep-research skill
+(dogfooding follow-up: long read-only investigations now stay inside
+the plugin instead of detouring into the upstream script).
 
 - Four new always-on read tools close the last research gaps:
   `github_list_languages` (byte shares sorted desc), `github_list_contributors`
@@ -229,7 +232,7 @@ dogfooding follow-up to #2).
 
 ## 0.6.0 (2026-08-24)
 
-Implements the high-value items of issue #2 (dogfooding retro).
+Dogfooding retro: high-value items from internal use of the v0.5.x tools.
 
 - New `github_get_file_tree`: one recursive Git-Data call lists the whole
   tree under a ref (default branch resolved automatically). Upstream
@@ -242,18 +245,23 @@ Implements the high-value items of issue #2 (dogfooding retro).
   null when unknown/anonymous) and `archived`, so write tools can be
   self-checked before hitting a 403.
 - Clone tool passes the live proxy through as HTTPS_PROXY/HTTP_PROXY to its
-  git subprocess — API proxying never implied git proxying (issue #2 §6).
+  git subprocess — API proxying never implied git proxying (the proxy
+  setting only routes api.github.com traffic; git clones need their own
+  fallback path through env vars).
 - Skill triggers now cover clone/checkout/download phrasing (guide source
   and installed copy); READMEs document the empty-path-lists-root behavior
   of get_file_contents and grow to 29 tools.
 
-Deferred by design (recorded on issue #2): inline-PAT migration into the
-credential-seam storage layer (needs host provider write capability),
-tarball export, and the gh-CLI integration (ruled out in appendix A).
+Deferred by design (recorded internally; no public issue references
+since the project's previous private tracker did not survive the
+rename): inline-PAT migration into the credential-seam storage layer
+(needs host provider write capability), tarball export, and the
+gh-CLI integration (ruled out — see the README "Why this plugin does
+not wrap the gh CLI" section).
 
 ## 0.5.0 (2026-08-24)
 
-Implements issue #1 — `github_clone_repository` (方案 1).
+Implements the clone tool (`github_clone_repository`, 方案 1).
 
 - New switchable clone tool (`enableCloneTools`, default off): clones any
   accessible repo — private included — to a local directory using the
@@ -277,10 +285,11 @@ Implements issue #1 — `github_clone_repository` (方案 1).
 
 ## 0.4.10 (2026-08-23)
 
-- Approval prompts are now Chinese-first and self-explanatory: each gated
-  ask carries a plain-language action label (e.g. 「一次性提交多个文件到仓库」)
-  next to the tool name and gate mode; denials explain where to adjust.
-- No behavior change — wording only.
+Chinese-first approval prompts: each gated ask now carries a
+plain-language action label (e.g. `「一次性提交多个文件到仓库」`) next
+to the tool name and gate mode, so users see at a glance what they're
+approving without cross-referencing the tool spec. Denials similarly
+explain where to adjust (`Settings → 插件 → GitHub → GitHub Gate`).
 
 ## 0.4.9 (2026-08-23)
 
