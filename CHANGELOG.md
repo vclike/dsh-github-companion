@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.1 (2026-09-05)
+
+Adapt to DeepSeek Harness `0.1.2-rc.1`. The four breakage points from the host
+release — peer-dep string, the removed `settingsNamespace` helper, the
+`JsonValue` re-export relocation, and the implicit `any` on the
+`tools/pre-execute` waterfall — are each pinpointed below. The new `defineTool`
+schema DSL is **backward-compatible** with the existing `parameters` / `output`
+shape, so the 33 tool definitions (and their 83 unit tests) needed no
+restructuring.
+
+- `package.json`: peer-dep string broadened to `^0.1.0-rc.7 || ^0.1.1-rc.1 || ^0.1.2-rc.1`; `dsh-credentials` / `dsh-settings` / `dsh-tools` dependencies and the four dev peers (`dsh-{llm,scope,session,timeout}`) lifted to `>=0.1.2-rc.1`; added `dsh-util-values` to runtime deps.
+- `src/index.ts` and `src/gate.ts`: dropped the now-removed `settingsNamespace` helper import and pass the namespace string directly to `ctx.settings.register(ns, schema, { base, applies })`. `Context.settings` augmentation is preserved via a side-effect `import type { SettingsProvider } from '@deepseek-ai/dsh-settings'`.
+- `src/tools.ts`: split `JsonValue` off the `dsh-tools` import — it now lives in `@deepseek-ai/dsh-util-values`. `defineTool` and `ToolDefinition` stay on `dsh-tools`.
+- `src/gate.ts`: explicit `(exec, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>` on the `tools/pre-execute` listener so the implicit-`any` lint check passes under the new strict-mode defaults.
+- Verification: `pnpm typecheck` clean, `pnpm build` clean, `vitest run` 83/83 green, `node scripts/verify-load.mjs` confirms 24 default tools + 33 after the live settings flip + the `github-tools` settings namespace + the gate's waterfall + the `dsh-github-usage` skill all register.
+- Bundle mount unchanged: still three rows (`github-tools`, `github-permission-gate`, `dsh-github-usage`) per the plugin's own `cordis.patch.yml`.
+
 ## 0.9.0 (2026-08-28)
 
 One bundle, one install: the standalone `dsh-github-guide` bundle (which did

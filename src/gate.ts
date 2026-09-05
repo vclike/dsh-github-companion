@@ -20,7 +20,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+// Imported for its declaration-merging side effect: `Context.settings` lives here.
+import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 
 import { GithubGateSectionSchema, type GithubGateSection } from './config.ts'
 import { GITHUB_WRITE_TOOL_LABELS, GITHUB_WRITE_TOOLS } from './tools.ts'
@@ -45,7 +46,7 @@ function fullAccessPosture(ctx: Context): boolean {
 }
 
 export function apply(ctx: Context, config: GithubGateSection) {
-  const sectionScope = ctx.settings.register(settingsNamespace('github-gate'), GithubGateSectionSchema, {
+  const sectionScope = ctx.settings.register('github-gate', GithubGateSectionSchema, {
     base: { mode: config.mode, action: config.action, excludeTools: config.excludeTools },
     applies: 'live',
   })
@@ -59,7 +60,7 @@ export function apply(ctx: Context, config: GithubGateSection) {
     return unwatch
   })
 
-  ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
+  ctx.on('tools/pre-execute', async (exec, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
     if (!exec.name.startsWith('github_')) return next()
     if (current.mode === 'off') return next()
     if (current.excludeTools.includes(exec.name)) return next()

@@ -15,7 +15,8 @@
  */
 
 import { readdirSync, statSync } from 'node:fs'
-import { defineTool, type JsonValue, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 import { cloneRepositoryTool } from './clone.ts'
 import type { GithubApi, IssueItem, PullRequestItem, ReleaseItem } from './api.ts'

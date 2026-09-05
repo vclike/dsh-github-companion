@@ -14,7 +14,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+// Imported for its declaration-merging side effect: `Context.settings` lives here.
+import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 
 import { GithubApi } from './api.ts'
 import { GithubClient } from './client.ts'
@@ -33,7 +34,7 @@ export const Config: typeof GithubToolsConfigSchema = GithubToolsConfigSchema
 export function apply(ctx: Context, config: GithubToolsConfig) {
   const ref = credentialRef(config.credentialRef)
 
-  const sectionScope = ctx.settings.register(settingsNamespace('github-tools'), GithubToolsSectionSchema, {
+  const sectionScope = ctx.settings.register('github-tools', GithubToolsSectionSchema, {
     base: {
       enableIssueWrites: config.enableIssueWrites,
       enableGitDataTools: config.enableGitDataTools,
