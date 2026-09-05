@@ -1,6 +1,8 @@
 # dsh-github-companion
 
-The complete GitHub integration for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): **33 native agent tools**, an in-process **permission gate**, an **on-demand usage skill**, and a separately-installed **cost-discipline companion skill** — all in one install. Zero `gh` CLI dependency.
+> DeepSeek Harness 插件：AI 操作 GitHub 的完整集成——33 个 REST/GraphQL 工具 + 进程内权限门 + 成本纪律 companion skill，零 gh CLI 依赖。
+>
+> DeepSeek Harness plugin: complete GitHub integration for AI agents — 33 REST/GraphQL tools + in-process permission gate + cost-discipline companion skill, zero `gh` CLI dependency.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
