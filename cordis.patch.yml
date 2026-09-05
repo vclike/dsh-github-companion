@@ -1,14 +1,16 @@
-# dsh-plugin-github bundle patch.
-# package.json 的 dsh.bundle.patch 指向本文件；`dsh plugin add dsh-plugin-github`
+# dsh-github-companion bundle patch.
+# package.json 的 dsh.bundle.patch 指向本文件；`dsh plugin add dsh-github-companion`
 # 会把下面三行插入目标 profile 的 cordis 配置，重启后生效。
-# 插件本体导出 name: 'github-tools'；门插件导出 name: 'github-permission-gate'；
-# 使用技能入口导出 name: 'dsh-github-usage'（v0.9.0 起并入本包，取代独立
+# 插件本体导出 name: 'github-companion'；门插件导出 name: 'github-companion-gate'；
+# 使用技能入口导出 name: 'github-companion-usage'（v0.9.0 起并入本包，取代独立
 # dsh-github-guide bundle——旧装用户请删掉 dsh-github-guide 行避免同名技能双注册）。
 # 三者都是普通 cordis 插件行——不想要门控时删除第二行（或把 mode 设为 off）即可。
+# v1.0.0 起所有 dsh-plugin-github 字面都换成 dsh-github-companion，但 settings
+# 命名空间（github-tools / github-gate）保持不变——settings.yaml 不需要迁移。
 - insert:
     - id: github-tools
-      name: dsh-plugin-github
+      name: dsh-github-companion
     - id: github-permission-gate
-      name: dsh-plugin-github/gate
+      name: dsh-github-companion/gate
     - id: dsh-github-usage
-      name: dsh-plugin-github/skill
+      name: dsh-github-companion/skill

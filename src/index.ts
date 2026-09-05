@@ -1,6 +1,8 @@
 /**
- * github-tools — DeepSeek Harness plugin exposing GitHub REST operations as
- * native agent tools.
+ * github-companion — DeepSeek Harness plugin exposing GitHub REST operations
+ * as native agent tools (one of three mount points of the `dsh-github-companion`
+ * package; the other two are `github-companion-gate` and
+ * `github-companion-usage`).
  *
  * - Credentials: the config carries only the env-var NAME (`credentialRef`);
  *   the value is resolved per operation through `ctx.credentials`, so a
@@ -26,7 +28,7 @@ import {
 } from './config.ts'
 import { buildGithubTools } from './tools.ts'
 
-export const name = 'github-tools'
+export const name = 'github-companion'
 export const inject = ['tools', 'credentials', 'settings'] as const
 
 export const Config: typeof GithubToolsConfigSchema = GithubToolsConfigSchema

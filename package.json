@@ -1,7 +1,7 @@
 {
-  "name": "dsh-plugin-github",
-  "version": "0.9.4",
-  "description": "DeepSeek Harness plugin: GitHub REST tools (repos/search/issues/PRs/git-data) with credential-seam token resolution and a companion permission-gate example.",
+  "name": "dsh-github-companion",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness plugin: complete GitHub integration for AI agents — 33 REST/GraphQL tools, an in-process permission gate, cost-discipline companion skill, and direct API access (no gh CLI dependency).",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.js",
@@ -30,7 +30,8 @@
     "README.zh.md",
     "CHANGELOG.md",
     "client.js",
-    "SKILL.md"
+    "SKILL.md",
+    "skill"
   ],
   "dsh": {
     "bundle": {

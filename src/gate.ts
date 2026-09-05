@@ -1,5 +1,6 @@
 /**
- * github-permission-gate — companion hook plugin for dsh-plugin-github.
+ * github-companion-gate — companion hook plugin for dsh-github-companion
+ * (one of three mount points of the `dsh-github-companion` package).
  *
  * A worked example of the `tools/pre-execute` permission pattern from the
  * official extension cookbook: the listener returns a typed
@@ -14,6 +15,13 @@
  * Action: `ask` routes through the harness approval service (allowed-once or
  * deny), `deny` refuses outright. Exemptions via exact tool-name match.
  *
+ * Fail-open posture: when the harness has no working approval channel
+ * (`ctx.approval` missing OR `ctx.approval.config.policy === 'never'`),
+ * `kind: 'ask'` would resolve `'unavailable'` and translate the user's
+ * explicit "don't bother me" intent into a fake "user rejected tool" failure.
+ * The gate auto-allows in that posture so unattended CI and full-access
+ * interactive runs both work without mis-reports.
+ *
  * The mode/action/exclusions are user-editable in the DSH settings UI under
  * namespace `github-gate`; cordis.yml provides the composition defaults.
  */
@@ -26,7 +34,7 @@ import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { GithubGateSectionSchema, type GithubGateSection } from './config.ts'
 import { GITHUB_WRITE_TOOL_LABELS, GITHUB_WRITE_TOOLS } from './tools.ts'
 
-export const name = 'github-permission-gate'
+export const name = 'github-companion-gate'
 export const inject = ['tools', 'settings', 'shell', 'approval'] as const
 
 export const Config: typeof GithubGateSectionSchema = GithubGateSectionSchema

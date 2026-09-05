@@ -1,15 +1,20 @@
 /**
- * dsh-github-usage entry — the packaged usage knowledge base for the
- * dsh-plugin-github tool set, registered as one on-demand agent skill.
+ * github-companion-usage entry — the packaged usage knowledge base for the
+ * dsh-github-companion tool set, registered as one on-demand agent skill.
  *
- * Mounted as a separate cordis plugin (`dsh-plugin-github/skill` via the
+ * Mounted as a separate cordis plugin (`dsh-github-companion/skill` via the
  * bundle patch) so the tools entry keeps its original inject list — a
  * profile without a `skills` service can skip this mount without ever
  * affecting tool availability. Mirrors the mount pattern of
- * `dsh-plugin-github/gate` (one package, several entry points).
+ * `dsh-github-companion/gate` (one package, several entry points).
  *
  * Since v0.9.0 this replaces the former standalone `dsh-github-guide`
  * bundle: same SKILL.md, same registration mechanism, one install.
+ *
+ * Note: the practical companion SKILL.md ("cost discipline / release flow
+ * / incident response") ships separately at
+ * `~/.dsh/skills/dsh-github-companion/` — it is authored by humans and not
+ * bundled with this plugin so its update cycle is independent.
  */
 
 import { readFileSync } from 'node:fs'
@@ -17,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { Context } from '@deepseek-ai/cordis'
 
-export const name = 'dsh-github-usage'
+export const name = 'github-companion-usage'
 export const inject = ['skills'] as const
 
 /** Package root: this file builds to lib/skill.js, sources live in src/. */
@@ -55,11 +60,11 @@ export function apply(ctx: SkillsContext): void {
   // removes the contribution on unload.
   ctx.effect(() =>
     ctx.skills.register({
-      name: 'dsh-github-usage',
+      name: 'dsh-github-companion',
       source: 'bundled',
       description:
         description
-        ?? 'How to drive the installed dsh-plugin-github tools: capability tiers, result conventions, token prerequisites, workflow recipes, failure playbook.',
+        ?? 'How to drive the installed dsh-github-companion tools: capability tiers, result conventions, token prerequisites, workflow recipes, failure playbook.',
       content: body,
       resourceBase: { kind: 'directory', path: packageRoot },
     }),

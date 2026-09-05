@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.0.0 (2026-09-05)
+
+**Rename + dsh 0.1.2-rc.1 compatibility + richer README.** This is also the
+first release that ships as `dsh-github-companion` (was `dsh-plugin-github`).
+Major version bump signals the package-identity change; the host-facing
+contract is otherwise unchanged (83/83 tests still pass, no `settings.yaml`
+migration required).
+
+### Rename
+
+- **npm package**: `dsh-plugin-github` → **`dsh-github-companion`** (matches the user-level companion skill at `~/.dsh/skills/dsh-github-companion/`).
+- **Plugin cordis `name`** (the module identifier each bundle registers):
+  - `github-tools` → `github-companion`
+  - `github-permission-gate` → `github-companion-gate`
+  - `dsh-github-usage` → `github-companion-usage`
+- **Sub-path exports**: `dsh-plugin-github/{gate,skill}` → `dsh-github-companion/{gate,skill}`.
+- **Registered skill name** (what shows in the agent's skill picker):
+  `dsh-github-usage` → **`dsh-github-companion`** (so the npm package,
+  the companion skill, and the auto-registered usage skill all share
+  one name).
+
+### Preserved (no settings.yaml migration)
+
+- **`id:` values** in `cordis.patch.yml` (the loader's bundle identifiers):
+  `github-tools`, `github-permission-gate`, `dsh-github-usage` — unchanged
+  so existing `~/.dsh/settings.yaml` keys continue to work.
+- **Settings namespaces** (`github-tools`, `github-gate`): unchanged.
+
+### Cumulative fixes (this is the release that bundles them all)
+
+- 0.9.1 — `settingsNamespace` helper removal, `JsonValue` relocation,
+  `tools/pre-execute` listener typing, peer-dep broadened to
+  `^0.1.2-rc.1`.
+- 0.9.2 — `hasNoApprovalChannel()` fail-open posture for the permission
+  gate (sandbox = `danger-full-access` + approval `policy = never`).
+- 0.9.3 — Browser settings card ported to `ctx.settingsScope` /
+  `ctx.connection.rpc.call('/host', …)`.
+- 0.9.4 — Companion skill documents the fail-open posture.
+
+### README
+
+- New intro: positions the package as "33 native tools + permission gate +
+  on-demand usage skill + companion discipline skill" with the gh CLI
+  rationale (zero external dependency, atomic multi-file commits,
+  first-class Actions cost guard, native GraphQL, sandbox/Windows
+  compatibility).
+- Updated install command: `dsh plugin add dsh-github-companion`.
+- Cordis patch row example matches the new module path.
+- `id:` vs `name:` clarification so users understand the rename
+  reaches only the module path.
+
 ## 0.9.4 (2026-09-05)
 
 Companion skill (`skill/dsh-github-companion/SKILL.md`): document the

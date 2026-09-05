@@ -10,7 +10,7 @@
  *
  * Usage: node verify-load.mjs [package-specifier]
  */
-const specifier = process.argv[2] ?? 'dsh-plugin-github'
+const specifier = process.argv[2] ?? 'dsh-github-companion'
 
 function fail(message) {
   console.error(`FAIL: ${message}`)
@@ -79,25 +79,25 @@ function makeFakeCtx(loggerName = 'ctx') {
 }
 
 const main = await import(specifier)
-if (main.name !== 'github-tools') fail(`entry name expected 'github-tools', got ${JSON.stringify(main.name)}`)
+if (main.name !== 'github-companion') fail(`entry name expected 'github-companion', got ${JSON.stringify(main.name)}`)
 if (!Array.isArray(main.inject) || !main.inject.includes('tools')) fail('entry inject must include tools')
 if (typeof main.apply !== 'function') fail('entry must export an apply function')
 
 const gate = await import(`${specifier}/gate`)
-if (gate.name !== 'github-permission-gate') fail(`gate name mismatch: ${JSON.stringify(gate.name)}`)
+if (gate.name !== 'github-companion-gate') fail(`gate name mismatch: ${JSON.stringify(gate.name)}`)
 if (!Array.isArray(gate.inject) || !gate.inject.includes('settings')) fail('gate inject must include settings')
 if (typeof gate.apply !== 'function') fail('gate must export an apply function')
 
-// Skill entry (v0.9.0 merge of dsh-github-guide): registers dsh-github-usage
-// from the package-root SKILL.md through the skills service.
+// Skill entry (v0.9.0 merge of dsh-github-guide; renamed dsh-github-companion at v1.0.0):
+// registers dsh-github-companion from the package-root SKILL.md through the skills service.
 const skillEntry = await import(`${specifier}/skill`)
-if (skillEntry.name !== 'dsh-github-usage') fail(`skill entry name mismatch: ${JSON.stringify(skillEntry.name)}`)
+if (skillEntry.name !== 'github-companion-usage') fail(`skill entry name mismatch: ${JSON.stringify(skillEntry.name)}`)
 if (!Array.isArray(skillEntry.inject) || !skillEntry.inject.includes('skills')) fail('skill inject must include skills')
 if (typeof skillEntry.apply !== 'function') fail('skill entry must export an apply function')
 const skillCtx = makeFakeCtx('skill')
 skillCtx.skills = {
   register(definition) {
-    if (definition.name !== 'dsh-github-usage') fail(`skill name mismatch: ${JSON.stringify(definition.name)}`)
+    if (definition.name !== 'dsh-github-companion') fail(`skill name mismatch: ${JSON.stringify(definition.name)}`)
     if (!definition.content || definition.content.length < 1000) fail('skill content missing or too short')
     if (!definition.description) fail('skill description missing')
     return () => {}
