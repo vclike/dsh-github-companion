@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.3 (2026-09-05)
+
+Browser settings card: port `client.js` from the pre-rc.1 flat RPC surface
+(`conn.api.settings.describe/mutate`) to the 0.1.2-rc.1 `ctx.settingsScope`
+service. Symptom was a "settings surface unavailable" error on the card the
+moment the user opened Settings → Plugins → GitHub; the panel mounted fine
+but the first `describeOurs()` call short-circuited because `conn.api.settings`
+no longer exists on the new connection shape.
+
+- **Settings read**: `api.settings.describe({})` → `ctx.settingsScope.describe().ensure()` then `.getSnapshot()`. The cross-namespace mirror is the single reader and folds write answers in; a stale `idle`/`unavailable` snapshot is handled before we pick the two `SettingsNamespaceView` rows we own.
+- **Settings write**: `api.settings.mutate({ ns, ops, expectedRevision })` → `ctx.settingsScope.bind({ namespace: ns }).mutate(ops, expectedRevision)`. The path-op shape (`{op:'set', path:[…], value}` / `{op:'unset', path:[…]}`) is unchanged.
+- **Directory chooser**: `api.host.pickDirectory({})` → `ctx.connection.rpc.call('/host', 'pickDirectory', {})`. When the channel is missing the error reads "请手动输入路径" instead of crashing.
+- **Inject list**: `['connection', 'slots']` → `['settingsScope', 'slots']`. `settingsScope` is provided by `@deepseek-ai/dsh-client-ui-settings`, always loaded in the web profile.
+- **Connector plumbing**: dropped the local `getConnection` indirection — the panel now receives `ctx` directly from `slots.inject`, so every call site reads from one reference.
+
+Verified by syntax check on the hand-written UMD; no automated tests cover the browser half. The host-side bundles (`lib/` artifacts) are unchanged because `client.js` is shipped as-is and the `lib/client.js.map` from `src/client.ts` was already unused.
+
 ## 0.9.2 (2026-09-05)
 
 Permission gate: fail-open when the harness has no working approval channel.
