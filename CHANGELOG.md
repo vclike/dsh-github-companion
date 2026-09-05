@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.9.2 (2026-09-05)
+
+Permission gate: fail-open when the harness has no working approval channel.
+The pre-0.9.2 posture detection required `ctx.shell.sandboxMode === 'danger-full-access'`
+AND `ctx.approval.config.policy === 'never'` simultaneously, which left two
+painful real-world cases where the gate deterministically blocked tools it
+should have passed:
+
+1. **The bundled "full access" posture** (sandbox = `danger-full-access` +
+   policy = `never`). The user's whole intent is "don't bother me, run it" —
+   yet the gate tried to ask, the approval service rejected with
+   `'unavailable'`, and the model transcript falsely reported a "user
+   rejected tool" failure. The plugin became unusable under the very posture
+   that grants the most trust.
+2. **Minimal hosts** without an `approval` service mounted at all (older
+   dsh hosts, headless CI shapes). Asking was equally futile.
+
+`hasNoApprovalChannel(ctx)` now answers the **one question that actually
+matters** — "would `kind: 'ask'` be deliverable?" — by inspecting the
+approval service directly:
+
+- `ctx.approval` missing → no channel → auto-allow
+- `ctx.approval.config.policy === 'never'` → deterministic reject → auto-allow
+- otherwise → ask normally
+
+`action = 'deny'` still wins over the no-channel posture (refusing must remain
+an explicit override). The bundled `mode = 'writes'`, the author's 11-tool
+exclude list, and the live settings-watch contract are all unchanged.
+
+- `tests/gate.test.ts`: replaced the dual-knob test with four focused cases —
+  (a) danger-full-access + never auto-allows, (b) never alone auto-allows,
+  (c) missing approval service auto-allows, (d) `action = 'deny'` still wins.
+  12 gate tests pass; 83 total.
+- Side benefit: the new behavior is documented as the canonical
+  "no-approval-channel" posture so future readers do not re-add the brittle
+  sandbox-mode check.
+
 ## 0.9.1 (2026-09-05)
 
 Adapt to DeepSeek Harness `0.1.2-rc.1`. The four breakage points from the host

@@ -32,17 +32,26 @@ export const inject = ['tools', 'settings', 'shell', 'approval'] as const
 export const Config: typeof GithubGateSectionSchema = GithubGateSectionSchema
 
 /**
- * True only for the exact bundled "Full access" posture: sandbox
- * danger-full-access AND approval policy never. That combination has no
- * prompt channel at all — every ask would deterministically fail downstream
- * misreported as "the user rejected tool". Both knobs must agree because
- * they are independent: e.g. a custom read-local-files + no-prompt setup
- * does NOT express the same blanket trust for remote writes.
+ * True when the gate has NO working approval channel — either the approval
+ * service is absent, or its policy is `never`. Under either condition a
+ * `kind: 'ask'` decision cannot be delivered and would resolve `'unavailable'`
+ * (fail-closed). Asking in that posture would deterministically translate
+ * "user trusted the run" into "user rejected the tool" — so we fail OPEN
+ * instead: auto-allow, log why, let the downstream surface (if any) emit its
+ * own audit.
+ *
+ * This is the precise signal behind the bundled "full access" posture
+ * (sandbox = `danger-full-access` + approval = `never`): asking is futile, so
+ * the gate must not block. It also handles the legitimate "minimal host"
+ * case where the approval service is not even mounted.
  */
-function fullAccessPosture(ctx: Context): boolean {
-  const shell = (ctx as unknown as { shell?: { sandboxMode?: string } }).shell
-  const approval = (ctx as unknown as { approval?: { config?: { policy?: string } } }).approval
-  return shell?.sandboxMode === 'danger-full-access' && approval?.config?.policy === 'never'
+function hasNoApprovalChannel(ctx: Context): boolean {
+  const approval = (ctx as unknown as {
+    approval?: { config?: { policy?: 'ask' | 'never' } }
+  }).approval
+  if (!approval) return true
+  if (approval.config?.policy === 'never') return true
+  return false
 }
 
 export function apply(ctx: Context, config: GithubGateSection) {
@@ -71,10 +80,14 @@ export function apply(ctx: Context, config: GithubGateSection) {
     if (current.action === 'deny') {
       return { kind: 'deny', reason: `GitHub 工具 '${exec.name}' 已被权限门拒绝（模式=${current.mode}）。如需放行可在设置中调整门模式或豁免该工具。` }
     }
-    if (fullAccessPosture(ctx)) {
+    if (hasNoApprovalChannel(ctx)) {
+      // Fail-open: no approval channel exists, so `kind: 'ask'` would resolve
+      // 'unavailable' and the tool would silently refuse. Auto-allow and
+      // log so the agent's transcript still carries the decision.
       ctx.logger?.info?.(
-        'github-permission-gate: Full access posture → auto-allowing %s without prompting',
+        'github-permission-gate: no approval channel available → auto-allowing %s (mode=%s)',
         exec.name,
+        current.mode,
       )
       return next()
     }

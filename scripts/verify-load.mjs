@@ -149,6 +149,10 @@ if (!flippedNames.includes('github_create_repository')) {
 // Mount the gate plugin and exercise the waterfall.
 const gateCtx = makeFakeCtx('gate')
 gateCtx.settings.register = gateCtx.settings.register.bind(gateCtx)
+// The harness approval service is the channel that distinguishes "ask" from
+// "fail-open" in the new gate logic; provide a fake that mimics policy='ask'
+// so the waterfall still produces `kind: 'ask'` here.
+gateCtx.approval = { config: { policy: 'ask' } }
 gate.apply(gateCtx, { mode: 'writes', action: 'ask', excludeTools: [], ...gateDefaults })
 const preListeners = gateCtx.listeners.get('tools/pre-execute')
 if (!preListeners || preListeners.length !== 1) fail('gate did not register exactly one tools/pre-execute listener')
