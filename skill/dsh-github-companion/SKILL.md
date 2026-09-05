@@ -30,3 +30,23 @@ description: dsh-plugin-github 的配套实践技能（成本防护 + 发版流�
 - 关闭/调整：设置 UI `github-tools` 区 `actionsGuardEnabled` / `actionsGuardTagCooldownMinutes`，或 `~/.dsh/settings.yaml` 用户层同名键。
 
 注意：**本地 `git push` 不经过插件**，防护只覆盖 API 推送面；本地推送纪律靠本技能约束 agent 行为。
+
+## 权限门完全权限姿势（v0.9.2 起，自动生效）
+
+`github-permission-gate` 在以下任一情况会**自动放行**（不弹窗、不问、不返回 ask）：
+
+- `ctx.approval` 服务未挂载（旧 host / 极简 headless）
+- `ctx.approval.config.policy === 'never'`（完全权限运行）
+
+底层原理：policy=never 的字面语义是"永远别问我"——任何 `kind: 'ask'` 都会被确定性拒绝为 `'unavailable'`，旧版 gate 误把这条翻译成"用户拒绝工具"。v0.9.2 改判 fail-open，避免在完全权限场景下产生假拒绝。
+
+**对 agent 的实际含义**：当用户用 `sandboxMode: danger-full-access + approval policy: never`（或在 CI/headless 无 approval 服务）跑 dsh 时，**所有 33 个 github_* 工具（含 push_files、create_release、create_repository、clone）都直接可用**，没有任何弹窗。
+
+**完全权限下的真正安全层**（gate 在该姿势下失效，这些是兜底）：
+1. **token scope**：用 fine-grained PAT 限定仓库与权限（不要用 classic `repo` 全权）
+2. **`actionsGuardEnabled`**（已默认开）：防 push/release 叠触发 Actions 分钟
+3. **`actionsGuardTagCooldownMinutes`**（已默认 30 分钟）：防 agent 循环反复打 tag
+4. **dsh host audit log**：所有工具调用参数与返回值有据可查
+5. **dsh file sandbox**：非 danger-full-access 时 `workspace-write` 把 agent 文件操作限制在工作区
+
+如果用户用 `mode: writes` 配了 `excludeTools`，那些工具在该姿势下直接走 exclude 分支（更早的 pass-through），不经过 fail-open 判断。

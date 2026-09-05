@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.4 (2026-09-05)
+
+Companion skill (`skill/dsh-github-companion/SKILL.md`): document the
+v0.9.2 fail-open gate posture. The user-level copy at
+`~/.dsh/skills/dsh-github-companion/SKILL.md` is the one dsh actually loads;
+the source-of-truth lives at `D:\work_space\Github\dsh-github-companion\`
+(workspace) — both copies are kept in sync, and the bundled copy here
+travels with the plugin release.
+
+- New section **"权限门完全权限姿势（v0.9.2 起，自动生效）"** appended to SKILL.md.
+- Names the two trigger conditions (approval service missing / `policy === 'never'`) and explains why `kind: 'ask'` is mechanically futile under `never` (the old version mis-translated this as "user rejected tool").
+- Calls out that **all 33 tools run unprompted** under full-access posture — including `push_files`, `create_release`, `create_repository`, `clone_repository`.
+- Lists the actual safety layers in that posture (fine-grained PAT token scope, `actionsGuardEnabled`, `actionsGuardTagCooldownMinutes`, dsh file sandbox, host audit log) so the agent does not lose track of where the real guardrails live when the gate falls open.
+
+The four `references/*.md` files (cost-discipline, incident-playbook, release-flows, repo-hardening) are unchanged — their facts (the v0.8.1 guard contract, billing reality, CI templates, npm peer-resolve loop) still hold against the v0.9.x runtime.
+
 ## 0.9.3 (2026-09-05)
 
 Browser settings card: port `client.js` from the pre-rc.1 flat RPC surface
