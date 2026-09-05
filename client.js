@@ -11,7 +11,7 @@
  * never breaks the host.
  */
 window.__ModuleLoader__.load({
-	id: 'dsh-plugin-github',
+	id: 'dsh-github-companion',
 	factory: (require) => {
 		var module = { exports: {} }
 		const react = require('react')
@@ -485,7 +485,7 @@ window.__ModuleLoader__.load({
 				if (!ctx.slots) throw new Error('slots service not injected — is "slots" in this module\'s inject list?')
 				ctx.slots.inject('settings.section', () => ctx.slots.register({
 					name: 'settings.section',
-					id: 'dsh-plugin-github',
+					id: 'dsh-github-companion',
 					order: 60,
 					label: () => 'GitHub',
 				}, makePanel(ctx)))

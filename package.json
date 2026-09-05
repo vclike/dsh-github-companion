@@ -1,7 +1,7 @@
 {
   "name": "dsh-github-companion",
   "version": "1.0.0",
-  "description": "DeepSeek Harness plugin: complete GitHub integration for AI agents — 33 REST/GraphQL tools, an in-process permission gate, cost-discipline companion skill, and direct API access (no gh CLI dependency).",
+  "description": "DeepSeek Harness 插件：AI 操作 GitHub 的完整集成——33 个 REST/GraphQL 工具 + 进程内权限门 + 成本纪律 companion skill，零 gh CLI 依赖。",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.js",
