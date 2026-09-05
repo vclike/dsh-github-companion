@@ -85,26 +85,27 @@ window.__ModuleLoader__.load({
 		}
 
 		/** Fetch the describe mirror and pick out our two namespaces. */
-		async function describeOurs(api) {
-			const res = await api.settings.describe({})
-			const inner = res && res.result ? res.result : null
-			if (!inner || !inner.ok)
-				throw new Error(inner && inner.message ? inner.message : 'settings.describe failed')
-			const list = (inner.value && inner.value.namespaces) || []
+		async function describeOurs(ctx) {
+			const binder = ctx.settingsScope
+			if (!binder || typeof binder.describe !== 'function')
+				throw new Error('settingsScope service unavailable')
+			const face = binder.describe()
+			await face.ensure()
+			const snap = face.getSnapshot()
+			if (snap.status === 'unavailable')
+				throw new Error(snap.error || 'settings mirror unavailable')
+			const list = (snap.view && snap.view.namespaces) || []
 			const byNs = new Map(list.map(d => [d.ns, d]))
 			return { tools: byNs.get(NS_TOOLS) || null, gate: byNs.get(NS_GATE) || null }
 		}
 
 		/** One path-op write against a namespace's user layer. */
-		async function writeOp(api, ns, descriptor, op) {
-			const res = await api.settings.mutate({
-				ns,
-				ops: [op],
-				expectedRevision: descriptor.revision,
-			})
-			const inner = res && res.result ? res.result : null
-			if (!inner || !inner.ok)
-				throw new Error(inner && inner.message ? inner.message : 'settings write failed')
+		async function writeOp(ctx, ns, descriptor, op) {
+			const binder = ctx.settingsScope
+			if (!binder || typeof binder.bind !== 'function')
+				throw new Error('settingsScope service unavailable')
+			const scope = binder.bind({ namespace: ns })
+			await scope.mutate([op], descriptor && typeof descriptor.revision === 'number' ? descriptor.revision : undefined)
 		}
 
 		/** True when the redaction sidecar reports a value at `field`. */
@@ -114,29 +115,24 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Native OS folder chooser via the connection's `host.pickDirectory`
-		 * RPC. Wire shape: callUnary returns { result: { ok, value } } where
-		 * value = { path } (path null = user cancelled). Resolves the path,
-		 * null on cancel; THROWS readable errors on failure/no-surface.
+		 * Native OS folder chooser via the connection's RPC channel
+		 * (`/host` channel, `pickDirectory` endpoint). Returns the picked
+		 * absolute path, null on user cancel, THROWS readable errors on
+		 * failure/no-surface. Older hosts without the RPC channel fall back
+		 * to a no-surface error so the user can still type the path by hand.
 		 */
-		async function pickDirectory(conn) {
-			const api = conn && conn.api
-			const host = api && api.host
-			if (!host || typeof host.pickDirectory !== 'function') {
-				throw new Error('此宿主未提供目录选择器（host.pickDirectory 不可用），请手动输入路径')
-			}
-			let res = await host.pickDirectory({})
-			// unwrap layers: {result:{ok,value}} → value; tolerate bare shapes
-			if (res && typeof res === 'object' && 'result' in res) {
-				const inner = res.result
-				if (inner && inner.ok === false) throw new Error(inner.message || '目录选择请求被宿主拒绝')
-				res = inner && typeof inner === 'object' && 'value' in inner ? inner.value : inner
-			}
-			if (res && typeof res === 'object' && typeof res.path === 'string') return res.path
+		async function pickDirectory(ctx) {
+			const connection = ctx.connection
+			if (!connection || !connection.rpc || typeof connection.rpc.call !== 'function')
+				throw new Error('此宿主未提供目录选择器（connection.rpc 不可用），请手动输入路径')
+			const res = await connection.rpc.call('/host', 'pickDirectory', {})
+			if (res && res.ok === false) throw new Error(res.message || '目录选择请求被宿主拒绝')
+			const value = res && typeof res === 'object' && 'value' in res ? res.value : res
+			if (value && typeof value === 'object' && typeof value.path === 'string') return value.path
 			return null
 		}
 
-		function makePanel(getConnection) {
+		function makePanel(ctx) {
 			const h = react.createElement
 			const { useState, useEffect } = react
 
@@ -365,9 +361,7 @@ window.__ModuleLoader__.load({
 
 				const reload = async () => {
 					try {
-						const conn = getConnection()
-						if (!conn || !conn.api || !conn.api.settings) throw new Error('settings surface unavailable')
-						const ours = await describeOurs(conn.api)
+						const ours = await describeOurs(ctx)
 						setState({ loading: false, error: '', tools: ours.tools, gate: ours.gate })
 					} catch (error) {
 						setState({ loading: false, error: String((error && error.message) || error), tools: null, gate: null })
@@ -381,8 +375,7 @@ window.__ModuleLoader__.load({
 					setBusy(true)
 					setWriteError('')
 					try {
-						const conn = getConnection()
-						await writeOp(conn.api, ns, descriptor, op)
+						await writeOp(ctx, ns, descriptor, op)
 						if (after) after()
 						await reload()
 					} catch (error) {
@@ -443,7 +436,7 @@ window.__ModuleLoader__.load({
 							placeholder: '例如 D:\\work_space\\github',
 							value: t.value && t.value.workspaceRoot, busy,
 							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
-							onBrowse: () => pickDirectory(getConnection()),
+							onBrowse: () => pickDirectory(ctx),
 						}),
 						h(TextRow, {
 							label: 'API 代理', field: 'proxyUrl',
@@ -488,12 +481,6 @@ window.__ModuleLoader__.load({
 
 		function apply(ctx) {
 			ensureStyles()
-			let connection = undefined
-			try {
-				connection = ctx.get('connection')
-			} catch {
-				connection = undefined
-			}
 			try {
 				if (!ctx.slots) throw new Error('slots service not injected — is "slots" in this module\'s inject list?')
 				ctx.slots.inject('settings.section', () => ctx.slots.register({
@@ -501,7 +488,7 @@ window.__ModuleLoader__.load({
 					id: 'dsh-plugin-github',
 					order: 60,
 					label: () => 'GitHub',
-				}, makePanel(() => connection)))
+				}, makePanel(ctx)))
 			} catch (error) {
 				// Older hosts without the settings.section seat: degrade audibly
 				// in the browser console but never break the host.
@@ -509,7 +496,7 @@ window.__ModuleLoader__.load({
 			}
 		}
 
-		module.exports.inject = ['connection', 'slots']
+		module.exports.inject = ['settingsScope', 'slots']
 		module.exports.apply = apply
 		return module.exports
 	},
