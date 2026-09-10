@@ -8,9 +8,9 @@
 
 English | [中文](README.zh.md)
 
-> Verified against DeepSeek Harness `0.1.2-rc.1` (declared in
-> `peerDependencies`). Compatibility passes for new host releases
-> ship under `## CHANGELOG.md`.
+> Verified against DeepSeek Harness `0.1.2-rc.1` and `0.1.5-rc.1`
+> (declared in `peerDependencies`). Compatibility passes for new host
+> releases ship under `## CHANGELOG.md`.
 
 ## What's in the box
 

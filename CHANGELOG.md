@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## 1.0.1 (2026-09-11)
+
+- **Peer dependency widened** to also accept `^0.1.5-rc.1`. Verified
+  against DSH `0.1.5-rc.1`'s published package set: every cordis surface
+  this plugin touches (`ctx.tools` / `ctx.credentials` / `ctx.settings` /
+  `ctx.on('tools/pre-execute', …)`) is intact; none of 0.1.5's breaking
+  changes (legacy-rail removal, surface-0 `system/message` move,
+  `bgTimeline`/source-snapshot retirement, gesture-geometry `indexAtPointer`
+  drop, timeline-mode convergence, 50 ms jump-engine cooldown) intersect
+  this plugin's surface.
+- No source changes. Tests still 83/83.
+
 ## 1.0.0 (2026-09-05)
 
 **Rename + dsh 0.1.2-rc.1 compatibility + richer README.** This is also the

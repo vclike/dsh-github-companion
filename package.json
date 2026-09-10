@@ -1,6 +1,6 @@
 {
   "name": "dsh-github-companion",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DeepSeek Harness 插件：AI 操作 GitHub 的完整集成——33 个 REST/GraphQL 工具 + 进程内权限门 + 成本纪律 companion skill，零 gh CLI 依赖。",
   "license": "MIT",
   "type": "module",
@@ -72,6 +72,6 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh": "^0.1.0-rc.7 || ^0.1.1-rc.1 || ^0.1.2-rc.1"
+    "@deepseek-ai/dsh": "^0.1.0-rc.7 || ^0.1.1-rc.1 || ^0.1.2-rc.1 || ^0.1.5-rc.1"
   }
 }

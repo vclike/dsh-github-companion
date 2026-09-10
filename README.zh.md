@@ -4,7 +4,7 @@ DeepSeek Harness 上**完整**的 GitHub 集成包：**33 个原生 agent 工具
 
 [English](README.md) | 中文
 
-> 已在 DeepSeek Harness `0.1.2-rc.1` 上验证（见 `peerDependencies` 声明）；
+> 已在 DeepSeek Harness `0.1.2-rc.1` 与 `0.1.5-rc.1` 上验证（见 `peerDependencies` 声明）；
 > 宿主破坏性版本发布后会在此更新兼容结论。
 
 ## 包内三个挂载点
