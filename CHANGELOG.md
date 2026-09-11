@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.0.4 (2026-09-11)
+
+### Fixes
+
+- **Settings card: bring the bug surface back into view.**
+  v1.0.3 fixed three UI problems (silent browse button, no-op quick
+  presets, chip-on-chip jitter) but introduced a new one: every write now
+  failed silently with no UI feedback. The previous `writeError` was
+  rendered at the bottom of the card, far from the affected control; on
+  v1.0.3 the chip list also re-rendered after every write, pushing the
+  error line out of view entirely. End-users saw the chip light up for a
+  fraction of a second, the chip stayed dark, and nothing else happened.
+
+  v1.0.4 turns every potential failure into a visible signal:
+  - `[dsh-gh] …` console lines at apply / writeOp / toggle / pickDirectory
+    start, success, and failure points (browser DevTools console).
+  - `pickDirectory` logs the resolved path on success and the thrown
+    error on rejection; if `ctx.uiWorkspace` is missing it lists every
+    `ctx` key whose name mentions workspace / fs / connection / host so
+    the right alternative path is obvious from the console alone.
+  - The `写入失败：…` line is now rendered at the top of the exempt-tools
+    panel, immediately above the chip list — never out of view.
+  - `write` rethrows into `setWriteError` with the namespace + path
+    appended (e.g. `写入失败：…（写入路径：github-gate / excludeTools）`)
+    so the failing write is identifiable without opening DevTools.
+
+### Polish
+
+- **Hover-jitter chip layout (CSS).**
+  The 33-tool chip kept `min-width: 0`, so when a label swapped from a
+  long english name to a short chinese description the row reflowed and
+  the mouse hovered into the next chip, recursively. Each chip is now
+  `min-width: 7.5rem; justify-content: center; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis;` — long english names
+  truncate visibly, short chinese descriptions center cleanly, and the
+  row never reflows.
+
+No `src/*.ts` changes. No API contract change.
+
 ## 1.0.3 (2026-09-11)
 
 ### Fixes

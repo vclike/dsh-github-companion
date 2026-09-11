@@ -175,7 +175,7 @@ window.__ModuleLoader__.load({
 				'.dsh-gh-muted{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
 				'.dsh-gh-error{font-size:12px;line-height:1.5;color:#e5534b}',
 				'.dsh-gh-check{width:17px;height:17px;cursor:pointer;accent-color:var(--dsw-alias-label-primary,#111)}',
-				// --- 33-tool chip + risk dot (v1.0.3) ---
+				// --- 33-tool chip + risk dot (v1.0.4) ---
 				'.dsh-gh-modebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
 				'.dsh-gh-modebar-label{font-size:12px;color:var(--dsw-alias-label-tertiary,rgba(127,127,127,.7))}',
 				'.dsh-gh-modebar-btn{font-size:12px;line-height:18px;height:24px;padding:0 10px;',
@@ -192,19 +192,25 @@ window.__ModuleLoader__.load({
 				'.dsh-gh-risk-red{background:#e5534b}',
 				'.dsh-gh-risk-yellow{background:#d4a017}',
 				'.dsh-gh-risk-green{background:#2ea44f}',
+				// Fixed min-width prevents the chip from shrinking when its label
+				// swaps between the long english name and the shorter chinese
+				// description — without this, flex-wrap reflows the row and the
+				// mouse hovers into the next chip, recursively. 7.5rem holds the
+				// longest description ("读取我的所有仓库") comfortably; longer
+				// english names overflow visually but the row never reflows.
 				'.dsh-gh-toolchip{display:inline-flex;align-items:center;gap:6px;height:26px;',
 				'padding:0 12px;border-radius:999px;font-size:12px;line-height:18px;',
 				'white-space:nowrap;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
 				'background:var(--dsw-alias-bg-module-platform,transparent);',
 				'color:var(--dsw-alias-label-primary);font-family:inherit;cursor:pointer;font:inherit;',
 				'transition:opacity .12s ease, background .12s ease;',
-				'min-width:0;justify-content:center}',
+				'min-width:7.5rem;justify-content:center;max-width:100%;overflow:hidden;text-overflow:ellipsis}',
 				'.dsh-gh-toolchip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,transparent)}',
 				'.dsh-gh-toolchip:focus-visible{outline:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.45));outline-offset:1px}',
 				'.dsh-gh-toolchip.off{opacity:.42}',
 				'.dsh-gh-toolchip.off:hover:not(:disabled){opacity:.7}',
 				'.dsh-gh-toolchip.on .dsh-gh-toolname{font-weight:500}',
-				'.dsh-gh-toolname{display:inline-block;text-align:center;min-width:0}',
+				'.dsh-gh-toolname{display:inline-block;text-align:center}',
 			].join('')
 			document.head.appendChild(style)
 		}
@@ -246,12 +252,29 @@ window.__ModuleLoader__.load({
 		 * `/host/pickDirectory` endpoint is not, so the older call would
 		 * silently no-op (zero console error, zero UI feedback). Returns the
 		 * picked absolute path, throws a readable error otherwise.
+		 *
+		 * v1.0.4: defensive logging — every failure path emits a console line
+		 * tagged `[dsh-gh]`, so an end-user who reports "浏览按钮没反应" can
+		 * paste the console output and we can pinpoint the missing service vs.
+		 * the host rejection vs. the picker UI itself.
 		 */
 		async function pickDirectory(ctx) {
-			const ws = ctx.uiWorkspace
-			if (!ws || typeof ws.pickDirectory !== 'function')
-				throw new Error('此宿主未提供目录选择器（uiWorkspace.pickDirectory 不可用），请手动输入路径')
-			return ws.pickDirectory()
+			console.log('[dsh-gh] pickDirectory invoked; uiWorkspace typeof =', typeof (ctx && ctx.uiWorkspace))
+			const ws = ctx && ctx.uiWorkspace
+			if (!ws || typeof ws.pickDirectory !== 'function') {
+				const msg = '此宿主未提供目录选择器（uiWorkspace.pickDirectory 不可用）'
+				console.warn('[dsh-gh] pickDirectory: ' + msg + ' — available ctx keys =',
+					ctx ? Object.keys(ctx).filter(k => /workspace|fs|connection|host/i.test(k)) : '<no ctx>')
+				throw new Error(msg + '，请手动输入路径')
+			}
+			try {
+				const picked = await ws.pickDirectory()
+				console.log('[dsh-gh] pickDirectory resolved:', picked)
+				return picked
+			} catch (error) {
+				console.error('[dsh-gh] pickDirectory threw:', error)
+				throw error
+			}
 		}
 
 		function makePanel(ctx) {
@@ -362,7 +385,7 @@ window.__ModuleLoader__.load({
 			// Tapping a preset button overwrites `excludeTools` with the
 			// matching default set in one shot.
 			// ------------------------------------------------------------------------
-			function ExcludeToolsRow({ gate, busy, onWrite }) {
+			function ExcludeToolsRow({ gate, busy, writeError, onWrite }) {
 				const current = Array.isArray(gate.value && gate.value.excludeTools)
 					? gate.value.excludeTools : []
 				const [flash, setFlash] = useState('')
@@ -378,11 +401,13 @@ window.__ModuleLoader__.load({
 				)
 
 				const toggle = name => {
+					const wasOn = current.includes(name)
+					console.log('[dsh-gh] toggle:', name, 'was:', wasOn ? 'on' : 'off', 'current.length =', current.length)
 					const t = TOOL_BY_NAME[name]
-					const flashText = current.includes(name)
+					const flashText = wasOn
 						? '已恢复审批：' + t.desc
 						: '已免审批：' + t.desc
-					const next = current.includes(name)
+					const next = wasOn
 						? current.filter(n => n !== name)
 						: current.concat([name])
 					writeList(next, flashText)
@@ -401,6 +426,7 @@ window.__ModuleLoader__.load({
 				}))
 
 				return h('div', { className: 'dsh-gh-row stack' },
+					writeError ? h('div', { className: 'dsh-gh-error', style: { marginTop: 0 } }, '写入失败：' + writeError) : null,
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, '豁免工具（免审批）',
 							h('span', { className: 'dsh-gh-badge' }, String(current.length) + ' / ' + TOOL_NAMES.length)),
@@ -516,15 +542,21 @@ window.__ModuleLoader__.load({
 				useEffect(() => { void reload() }, [])
 
 				const write = async (ns, descriptor, op, after) => {
-					if (!descriptor) return
+					if (!descriptor) {
+						console.warn('[dsh-gh] write: descriptor missing for', ns, op.path)
+						return
+					}
+					console.log('[dsh-gh] write:', ns, op.path, '=', Array.isArray(op.value) ? op.value.length + ' items' : 'scalar')
 					setBusy(true)
 					setWriteError('')
 					try {
 						await writeOp(ctx, ns, descriptor, op)
 						if (after) after()
 						await reload()
+						console.log('[dsh-gh] write OK:', ns, op.path)
 					} catch (error) {
-						setWriteError(String((error && error.message) || error))
+						console.error('[dsh-gh] write failed:', ns, op.path, error)
+						setWriteError(String((error && error.message) || error) + '（写入路径：' + ns + ' / ' + op.path.join('.') + '）')
 						await reload()
 					} finally {
 						setBusy(false)
@@ -614,6 +646,7 @@ window.__ModuleLoader__.load({
 						}),
 						h(ExcludeToolsRow, {
 							gate: g, busy,
+							writeError: writeError,
 							onWrite: (op, after) => write(NS_GATE, g, op, after),
 						}),
 						writeError ? h('div', { className: 'dsh-gh-error' }, '写入失败：' + writeError) : null,
@@ -625,6 +658,9 @@ window.__ModuleLoader__.load({
 		}
 
 		function apply(ctx) {
+			console.log('[dsh-gh] apply: ctx.settingsScope =', typeof (ctx && ctx.settingsScope),
+				'ctx.slots =', typeof (ctx && ctx.slots),
+				'ctx.uiWorkspace =', typeof (ctx && ctx.uiWorkspace))
 			ensureStyles()
 			try {
 				if (!ctx.slots) throw new Error('slots service not injected — is "slots" in this module\'s inject list?')
@@ -634,6 +670,7 @@ window.__ModuleLoader__.load({
 					order: 60,
 					label: () => 'GitHub',
 				}, makePanel(ctx)))
+				console.log('[dsh-gh] settings card registered (id=dsh-github-companion)')
 			} catch (error) {
 				// Older hosts without the settings.section seat: degrade audibly
 				// in the browser console but never break the host.
