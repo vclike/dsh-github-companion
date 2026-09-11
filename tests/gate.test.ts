@@ -9,8 +9,13 @@ import { apply as applyGate } from '../src/gate.ts'
 /** Minimal Cordis capture harness: records the tools/pre-execute listener. */
 function makeCtx(
   section: GithubGateSection,
-  env: { defaultMode?: 'read-only' | 'workspace-write' | 'danger-full-access'; approvalPolicy?: 'ask' | 'never' } = {},
-  options: { omitApprovalService?: boolean } = {},
+  env: {
+    defaultMode?: 'read-only' | 'workspace-write' | 'danger-full-access'
+    approvalPolicy?: 'ask' | 'never'
+    /** Override return value for `approval.overrideOf(session)`. Defaults to undefined. */
+    sessionPolicyOverride?: 'ask' | 'never'
+  } = {},
+  options: { omitApprovalService?: boolean; withAgent?: boolean } = {},
 ) {
   let listener:
     | ((exec: unknown, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>)
@@ -37,7 +42,11 @@ function makeCtx(
     logger: { info() {}, warn() {}, error() {} },
   }
   if (!options.omitApprovalService) {
-    ctx.approval = { config: { policy: env.approvalPolicy ?? 'ask' } }
+    const sessionPolicy = env.sessionPolicyOverride
+    ctx.approval = {
+      config: { policy: env.approvalPolicy ?? 'ask' },
+      ...(sessionPolicy ? { overrideOf: () => sessionPolicy } : {}),
+    }
   }
   if (env.defaultMode !== undefined) {
     ctx.sandboxPolicy = { defaultMode: env.defaultMode }
@@ -55,8 +64,10 @@ function makeCtx(
 
 const ALLOW_NEXT = async () => ({ kind: 'allow' }) as PreToolDecision
 
-function exec(name: string): unknown {
-  return { callId: 'c1', name, arguments: {} }
+function exec(name: string, withAgent = true): unknown {
+  return withAgent
+    ? { callId: 'c1', name, arguments: {}, agent: { session: { id: 's1' } } }
+    : { callId: 'c1', name, arguments: {} }
 }
 
 async function decide(gate: ReturnType<typeof makeCtx>, name: string): Promise<PreToolDecision | 'no-listener'> {
@@ -123,6 +134,20 @@ describe('github-permission-gate', () => {
   })
 
   describe('No-approval-channel posture (fail-open)', () => {
+    it('session override = never auto-allows even when service config says ask', async () => {
+      // This is the exact posture that produced the "fake user rejected tool"
+      // bug: user switches the runtime approval policy to 'never', the session
+      // log records an `approval/policy` event, but the service config still
+      // defaults to 'ask'. The gate must honor the session override; otherwise
+      // `ApprovalService.decide()` resolves the forwarded ask as 'rejected'
+      // and the user sees a fake denial.
+      const gate = makeCtx(
+        { mode: 'writes', action: 'ask', excludeTools: [] },
+        { defaultMode: 'read-only', approvalPolicy: 'ask', sessionPolicyOverride: 'never' },
+      )
+      expect(await decide(gate, 'github_push_files')).toEqual({ kind: 'allow' })
+    })
+
     it('danger-full-access + approval=never auto-allows gated writes', async () => {
       const gate = makeCtx(
         { mode: 'writes', action: 'ask', excludeTools: [] },
@@ -161,6 +186,15 @@ describe('github-permission-gate', () => {
       const gate = makeCtx(
         { mode: 'writes', action: 'ask', excludeTools: [] },
         { defaultMode: 'workspace-write', approvalPolicy: 'ask' },
+      )
+      expect(await decide(gate, 'github_push_files')).toMatchObject({ kind: 'ask' })
+    })
+
+    it('falls back to service config when no session override is logged', async () => {
+      // No overrideOf stub → behaves like the original (config-only) code path.
+      const gate = makeCtx(
+        { mode: 'writes', action: 'ask', excludeTools: [] },
+        { defaultMode: 'read-only', approvalPolicy: 'ask' },
       )
       expect(await decide(gate, 'github_push_files')).toMatchObject({ kind: 'ask' })
     })

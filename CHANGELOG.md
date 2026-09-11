@@ -1,4 +1,36 @@
-﻿# Changelog
+# Changelog
+
+## 1.0.2 (2026-09-11)
+
+### Fixes
+
+- **`github-companion-gate`: fail-open now honors session-level `approval/policy` overrides.**
+  The 0.9.2 fix taught `hasNoApprovalChannel` to read `ctx.approval.config.policy`
+  (the deployment-wide service default) and fail-open when it was `'never'`.
+  What it missed: **runtime** switches — the user toggling approval to `'never'`
+  in the current session — go through `setApprovalPolicy(session, 'never')`
+  which appends an `approval/policy` event to the **session log** and does NOT
+  mutate the service config. The gate then forwarded `kind: 'ask'`,
+  `ApprovalService.decide()` read the effective policy from the session, found
+  `'never'`, and resolved the call as `'rejected'` — surfacing to the user as a
+  fake "user rejected tool" failure on every gated write under the
+  full-access posture (`sandbox=danger-full-access + approval=never`).
+
+  Now the gate calls the documented public method `approval.overrideOf(session)`
+  first and falls back to `config.policy` only when no override is logged. The
+  effective policy follows `dsh-user-approval/lib/index.js#effectivePolicy`:
+  `overrideOf(session) ?? config.policy ?? 'ask'`. Fail-open when the resolved
+  policy is `'never'` or the approval service is absent — matching the public
+  README contract under "Permission gate → Fail-open posture".
+
+- **`tests/gate.test.ts`: adds the missing mock surface and the regression case.**
+  The previous mock built `ctx.approval = { config: { policy } }` with no
+  `overrideOf` stub, so the "config = ask + override = never" path was untested
+  and the bug shipped. The harness now accepts an `env.sessionPolicyOverride`
+  to install the override, and a new test pins the fix:
+  *"session override = never auto-allows even when service config says ask"*.
+  A complementary test verifies the **fallback path** is still ask when no
+  override is logged.
 
 ## 1.0.1 (2026-09-11)
 
@@ -388,8 +420,8 @@ Fix: folder picker was a silent no-op.
 - Root cause: the browse button probed `api.workspaces.pickDirectory`, a
   namespace that does not exist on the client connection; the real surface
   is `host.pickDirectory` (returns `{ path }`, null = cancelled). Rewired
-  to the correct RPC and made failures visible next to the input instead
-  of swallowing them.
+  to the correct RPC and made failures visible next to the input instead of
+  swallowing them.
 
 ## 0.4.3 (2026-08-23)
 

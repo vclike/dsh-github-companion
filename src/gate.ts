@@ -16,10 +16,11 @@
  * deny), `deny` refuses outright. Exemptions via exact tool-name match.
  *
  * Fail-open posture: when the harness has no working approval channel
- * (`ctx.approval` missing OR `ctx.approval.config.policy === 'never'`),
- * `kind: 'ask'` would resolve `'unavailable'` and translate the user's
- * explicit "don't bother me" intent into a fake "user rejected tool" failure.
- * The gate auto-allows in that posture so unattended CI and full-access
+ * (resolved policy === 'never', or approval service absent), `kind: 'ask'`
+ * would resolve `'rejected'` (deterministic never policy) or `'unavailable'`
+ * (no answerers under ask) and translate the user's explicit
+ * "don't bother me" intent into a fake "user rejected tool" failure. The
+ * gate auto-allows in that posture so unattended CI and full-access
  * interactive runs both work without mis-reports.
  *
  * The mode/action/exclusions are user-editable in the DSH settings UI under
@@ -27,7 +28,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
+import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 // Imported for its declaration-merging side effect: `Context.settings` lives here.
 import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 
@@ -40,26 +41,70 @@ export const inject = ['tools', 'settings', 'shell', 'approval'] as const
 export const Config: typeof GithubGateSectionSchema = GithubGateSectionSchema
 
 /**
- * True when the gate has NO working approval channel — either the approval
- * service is absent, or its policy is `never`. Under either condition a
- * `kind: 'ask'` decision cannot be delivered and would resolve `'unavailable'`
- * (fail-closed). Asking in that posture would deterministically translate
- * "user trusted the run" into "user rejected the tool" — so we fail OPEN
- * instead: auto-allow, log why, let the downstream surface (if any) emit its
- * own audit.
+ * Resolve the **effective** approval policy for one tool call. The return
+ * value carries three distinct meanings, mirroring DSH's own
+ * `dsh-user-approval/lib/index.js#effectivePolicy` plus the channel-presence
+ * check that the 0.9.2 fix added:
+ *
+ *   `'never'`  — the gate must fail-open. Forwarding `kind: 'ask'` here
+ *                would resolve `'rejected'` (deterministic never) or
+ *                `'unavailable'` (no answerers), both surfacing to the user
+ *                as a fake "user rejected tool" failure. Three independent
+ *                triggers collapse to this answer:
+ *                  a. approval service is not mounted (minimal hosts);
+ *                  b. session override logs `'never'` (runtime switch);
+ *                  c. service config default is `'never'` (deployment-wide).
+ *   `'ask'`    — ask via the approval service is meaningful; safe to forward.
+ *   `undefined` — defensive: cannot determine. Caller treats as `'ask'`
+ *                to keep the default posture unchanged on odd hosts.
+ *
+ * `approval.overrideOf(session)` is the documented public method that walks
+ * the session log; we call it directly so a runtime switch to `'never'` is
+ * visible here even when the service config still says `'ask'`.
+ */
+function effectiveApprovalPolicy(
+  ctx: Context,
+  agent?: { session?: unknown },
+): 'ask' | 'never' | undefined {
+  const approval = (ctx as unknown as {
+    approval?: {
+      config?: { policy?: 'ask' | 'never' }
+      overrideOf?: (session: unknown) => 'ask' | 'never' | undefined
+    }
+  }).approval
+  // (a) no approval service mounted → no channel → fail-open.
+  if (!approval) return 'never'
+  // (b) session override on the caller's session log.
+  if (agent?.session && typeof approval.overrideOf === 'function') {
+    try {
+      const override = approval.overrideOf(agent.session)
+      if (override === 'never') return 'never'
+      if (override === 'ask') return 'ask'
+    } catch {
+      // treat malformed session as no-override; fall through to config
+    }
+  }
+  // (c) service-config default.
+  if (approval.config?.policy === 'never') return 'never'
+  return 'ask'
+}
+
+/**
+ * True when the gate has NO working approval channel — the resolved policy is
+ * `'never'`, the approval service is absent, or the override walk failed.
+ * Under either condition a `kind: 'ask'` decision cannot be delivered and
+ * `ApprovalService.decide()` resolves the call as `'rejected'` (never) or
+ * `'unavailable'` (no answerers) — both surface to the user as a fake
+ * "user rejected tool" failure. So we fail OPEN: auto-allow, log why, let
+ * the downstream surface (if any) emit its own audit.
  *
  * This is the precise signal behind the bundled "full access" posture
- * (sandbox = `danger-full-access` + approval = `never`): asking is futile, so
- * the gate must not block. It also handles the legitimate "minimal host"
+ * (sandbox = `danger-full-access` + approval = `'never'`): asking is futile,
+ * so the gate must not block. It also handles the legitimate "minimal host"
  * case where the approval service is not even mounted.
  */
-function hasNoApprovalChannel(ctx: Context): boolean {
-  const approval = (ctx as unknown as {
-    approval?: { config?: { policy?: 'ask' | 'never' } }
-  }).approval
-  if (!approval) return true
-  if (approval.config?.policy === 'never') return true
-  return false
+function hasNoApprovalChannel(ctx: Context, agent?: { session?: unknown }): boolean {
+  return effectiveApprovalPolicy(ctx, agent) === 'never'
 }
 
 export function apply(ctx: Context, config: GithubGateSection) {
@@ -77,7 +122,7 @@ export function apply(ctx: Context, config: GithubGateSection) {
     return unwatch
   })
 
-  ctx.on('tools/pre-execute', async (exec, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
+  ctx.on('tools/pre-execute', async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
     if (!exec.name.startsWith('github_')) return next()
     if (current.mode === 'off') return next()
     if (current.excludeTools.includes(exec.name)) return next()
@@ -88,9 +133,10 @@ export function apply(ctx: Context, config: GithubGateSection) {
     if (current.action === 'deny') {
       return { kind: 'deny', reason: `GitHub 工具 '${exec.name}' 已被权限门拒绝（模式=${current.mode}）。如需放行可在设置中调整门模式或豁免该工具。` }
     }
-    if (hasNoApprovalChannel(ctx)) {
-      // Fail-open: no approval channel exists, so `kind: 'ask'` would resolve
-      // 'unavailable' and the tool would silently refuse. Auto-allow and
+    if (hasNoApprovalChannel(ctx, exec.agent)) {
+      // Fail-open: the resolved policy is 'never' (or no approval service),
+      // so `kind: 'ask'` would resolve 'rejected' (never) or 'unavailable'
+      // (no answerers) and the tool would silently refuse. Auto-allow and
       // log so the agent's transcript still carries the decision.
       ctx.logger?.info?.(
         'github-permission-gate: no approval channel available → auto-allowing %s (mode=%s)',
