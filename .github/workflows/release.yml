@@ -64,7 +64,7 @@ jobs:
         # publishers list (set up once at
         # https://www.npmjs.com/settings/trusted-publishers — add
         # vclike/dsh-github-companion with workflow filename `release.yml`).
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag next
 
       - name: Publish to npm (NPM_TOKEN fallback for pre-TP hosts)
         if: env.HAS_NPM_TOKEN == 'true' && (github.event_name == 'push' || inputs.dry_run != 'true')
@@ -75,7 +75,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
-          npm publish --access public
+          npm publish --access public --tag next
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
