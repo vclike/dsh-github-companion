@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.0.6 (2026-09-11)
+
+### Fixes
+
+- **`pickDirectory` falls back to the legacy RPC endpoint when `uiWorkspace` is missing.**
+  v1.0.3 → v1.0.5 rely on `ctx.uiWorkspace.pickDirectory()`, the canonical
+  path on DSH 0.1.5-rc.1+. Some hosts that were built off pre-0.9.3
+  patches still expose the old `connection.rpc.call('/host',
+  'pickDirectory', {})` endpoint even though the docs say it was retired.
+  v1.0.6 falls back to that endpoint when `uiWorkspace.pickDirectory`
+  is missing; response shape is parsed permissively (string | envelope
+  with `.value.path` | `.path` direct) so the older hosts that wrap
+  responses in `{ result: { ok, value: { path } } }` (pre-0.4.5 envelope)
+  or `{ ok, value: { path } }` (newer wrapper) both work. The
+  `uiWorkspace` path remains primary; the fallback only fires when the
+  primary path is unavailable.
+
+- **`writeOp` no longer passes `expectedRevision` to `scope.mutate`.**
+  dsh-settings' `mutate(ops, expectedRevision)` skips the revision
+  conflict check when `expectedRevision === undefined` and throws
+  `SettingsConflictError` when it disagrees with the live registration.
+  The previous `descriptor.revision` filter (`typeof ... === 'number'`)
+  would pass through string revisions and trigger that throw; the throw
+  bubbled out as a generic "write failed" with no actionable hint. With
+  undefined the service does its own conflict resolution and never
+  throws on a stale descriptor — the read-modify-write loop in the
+  panel already re-reads after every click.
+
+### Notes
+
+The remaining failure modes — `writeOp` throwing on a genuinely missing
+service, schema validation rejecting an over-long `excludeTools`,
+`settingsScope.bind()` returning a non-scope value — are still
+diagnosable via the v1.0.4 console logs (`[dsh-gh] write: github-gate
+/ excludeTools = N items`). v1.0.6 keeps those logs intact.
+
+No `src/*.ts` changes.
+
 ## 1.0.5 (2026-09-11)
 
 ### Fixes

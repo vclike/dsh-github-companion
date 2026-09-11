@@ -242,7 +242,14 @@ window.__ModuleLoader__.load({
 			if (!binder || typeof binder.bind !== 'function')
 				throw new Error('settingsScope service unavailable')
 			const scope = binder.bind({ namespace: ns })
-			await scope.mutate([op], descriptor && typeof descriptor.revision === 'number' ? descriptor.revision : undefined)
+			// Pass `undefined` for `expectedRevision`. dsh-settings skips the
+			// revision-conflict check when the argument is `undefined`; the
+			// read-modify-write loop in this card re-reads the descriptor
+			// via `reload()` after every write, so a stale-revision scenario
+			// can only happen if the user mutates the same namespace from
+			// somewhere else mid-click, in which case the next write will
+			// simply re-merge on top of the new value — no data loss.
+			await scope.mutate([op])
 		}
 
 		/** True when the redaction sidecar reports a value at `field`. */
@@ -266,21 +273,57 @@ window.__ModuleLoader__.load({
 		 */
 		async function pickDirectory(ctx) {
 			console.log('[dsh-gh] pickDirectory invoked; uiWorkspace typeof =', typeof (ctx && ctx.uiWorkspace))
+			// Path 1 (v1.0.3+): the host's `uiWorkspace` service — the canonical
+			// path on DSH 0.1.5-rc.1+. Returns the picked path or throws a
+			// readable error.
 			const ws = ctx && ctx.uiWorkspace
-			if (!ws || typeof ws.pickDirectory !== 'function') {
-				const msg = '此宿主未提供目录选择器（uiWorkspace.pickDirectory 不可用）'
-				console.warn('[dsh-gh] pickDirectory: ' + msg + ' — available ctx keys =',
-					ctx ? Object.keys(ctx).filter(k => /workspace|fs|connection|host/i.test(k)) : '<no ctx>')
-				throw new Error(msg + '，请手动输入路径')
+			if (ws && typeof ws.pickDirectory === 'function') {
+				try {
+					const picked = await ws.pickDirectory()
+					console.log('[dsh-gh] pickDirectory (uiWorkspace) resolved:', picked)
+					return picked
+				} catch (error) {
+					console.error('[dsh-gh] pickDirectory (uiWorkspace) threw:', error)
+					throw error
+				}
 			}
-			try {
-				const picked = await ws.pickDirectory()
-				console.log('[dsh-gh] pickDirectory resolved:', picked)
-				return picked
-			} catch (error) {
-				console.error('[dsh-gh] pickDirectory threw:', error)
-				throw error
+			// Path 2 (v1.0.6 legacy fallback): the pre-0.9.3
+			// `connection.rpc.call('/host', 'pickDirectory', {})` surface.
+			// Officially retired in 0.1.5-rc.1 — the `/host/pickDirectory`
+			// endpoint is no longer registered — but `connection.rpc` itself
+			// is still mounted. We try it as a fallback so a user whose host
+			// happens to keep the legacy endpoint mounted gets the picker
+			// rather than a "please type by hand" error. If it fails (RPC
+			// error or unexpected response shape), we fall through to the
+			// final error below.
+			const conn = ctx && ctx.connection
+			if (conn && conn.rpc && typeof conn.rpc.call === 'function') {
+				console.log('[dsh-gh] pickDirectory: uiWorkspace missing, trying legacy connection.rpc.call')
+				try {
+					const res = await conn.rpc.call('/host', 'pickDirectory', {})
+					if (res && res.ok === false) throw new Error(res.message || '目录选择请求被宿主拒绝')
+					// Response shape is host-dependent: the v0.4.x envelope was
+					// `{ result: { ok, value } }` wrapping `{ path }`; newer hosts
+					// may unwrap to `{ ok, value: { path } }` or pass through.
+					const value = res && typeof res === 'object' && 'value' in res ? res.value : res
+					if (value && typeof value === 'object' && typeof value.path === 'string') {
+						console.log('[dsh-gh] pickDirectory (legacy) resolved:', value.path)
+						return value.path
+					}
+					if (typeof res === 'string' && res) {
+						console.log('[dsh-gh] pickDirectory (legacy) resolved:', res)
+						return res
+					}
+					console.warn('[dsh-gh] pickDirectory (legacy) returned unexpected shape:', res)
+				} catch (error) {
+					console.error('[dsh-gh] pickDirectory (legacy) threw:', error)
+					// fall through to the final error
+				}
 			}
+			const msg = '此宿主未提供目录选择器（uiWorkspace.pickDirectory 与 connection.rpc 旧路径都不可用）'
+			console.warn('[dsh-gh] pickDirectory: ' + msg + ' — available ctx keys =',
+				ctx ? Object.keys(ctx).filter(k => /workspace|fs|connection|host/i.test(k)) : '<no ctx>')
+			throw new Error(msg + '，请手动输入路径')
 		}
 
 		function makePanel(ctx) {
