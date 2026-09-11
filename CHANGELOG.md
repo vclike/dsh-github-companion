@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.0.3 (2026-09-11)
+
+### Fixes
+
+- **Settings card "默认克隆目录" 浏览按钮 silent no-op.**
+  The pre-0.9.3 code path `connection.rpc.call('/host', 'pickDirectory', {})` was
+  retired in DSH 0.1.5-rc.1 — the rpc channel is still mounted but the
+  `/host/pickDirectory` endpoint is not, so the older call would silently
+  no-op (zero console error, zero UI feedback). `pickDirectory(ctx)` now
+  calls `ctx.uiWorkspace.pickDirectory()`, which returns the picked path
+  directly or throws. `uiWorkspace` is added to the module's `inject` list
+  (`module.exports.inject = ['settingsScope', 'slots', 'uiWorkspace']`).
+
+### Improvements
+
+- **豁免工具 panel: 33 工具胶囊 + 风险分级 + hover 变中文 + 快速预设.**
+  Replaces the previous "current chips + 8 suggested buttons + manual text
+  input" composition with one panel listing all 33 tools as clickable chips,
+  grouped by risk color:
+    - 🟢 23 只读工具（queries, searches, list/get）
+    - 🟡 6 可逆的写（issue / PR / branch / fork sync）
+    - 🔴 5 不可逆 / 触发 Actions / 拉代码（`push_files`, `create_release`,
+      `create_repository`, `create_or_update_file`, `clone_repository`）
+  Toggled chips render at full opacity, untoggled at 0.42 — the
+  currently-exempt set is visually obvious. On hover each chip swaps its
+  english tool name for a concise Chinese description (chip size never
+  changes; description is centered). The risk dot stays put so the visual
+  mapping is preserved.
+  Three "快速预设" buttons above the chips apply the canonical default
+  sets in one shot: `off` (all 33), `writes` (23 read-only), `all` (empty).
+  `mode` field is left intact for back-compat — chips and presets write
+  only to `excludeTools`.
+
+No source changes outside `client.js` and `package.json`.
+
 ## 1.0.2 (2026-09-11)
 
 ### Fixes

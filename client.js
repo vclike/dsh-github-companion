@@ -1,15 +1,36 @@
 /**
- * dsh-plugin-github — browser half (settings card).
+ * dsh-github-companion — browser half (settings card).
  *
  * Contributes one "GitHub" section to the DSH settings page, rendering the
  * backend-registered `github-tools` and `github-gate` namespaces through the
- * official settings surface (describe + mutate over the client connection).
+ * official settings surface (describe + mutate over `ctx.settingsScope`).
  *
  * Hand-written against the shared client externals (`react` via the module
  * loader's require) — same shape as dsh-status-rotator's browser half, so no
  * bundler step is needed. Everything degrades audibly (console.warn) but
  * never breaks the host.
+ *
+ * Settings UI invariants:
+ * - "默认克隆目录" 浏览按钮: `ctx.uiWorkspace.pickDirectory()` (the v0.4.x
+ *   `connection.rpc.call('/host', 'pickDirectory', {})` path was retired in
+ *   0.1.5-rc.1; the rpc endpoint is gone but the connection.rpc surface itself
+ *   is still mounted, so calls fail silently).
+ * - "豁免工具" panel: 33 chips, one per GitHub tool. On hover the chip text
+ *   swaps from the english tool name to a concise Chinese description (no
+ *   tooltip; the chip stays the same size and the description is centered).
+ *   A small colored dot marks risk: green = read-only, yellow = reversible
+ *   write, red = creates a resource / burns Actions minutes / pulls code
+ *   onto this machine. Untoggled chips render at lower opacity so the
+ *   currently-exempt set is visually obvious.
+ * - "快速预设" row above the chips: tapping one of three buttons applies
+ *   the matching `excludeTools` set in one shot:
+ *     off   = all 33 (gate never prompts),
+ *     writes = all 23 read-only (gate only prompts on writes),
+ *     all   = empty (gate prompts on every github_* call).
+ *   Manual chip toggles after a preset application DO NOT mutate the
+ *   `mode` field — the two are independent (`mode` stays for back-compat).
  */
+
 window.__ModuleLoader__.load({
 	id: 'dsh-github-companion',
 	factory: (require) => {
@@ -19,68 +40,172 @@ window.__ModuleLoader__.load({
 		const NS_TOOLS = 'github-tools'
 		const NS_GATE = 'github-gate'
 
+		// ------------------------------------------------------------------------
+		// 33 tools: risk classification + concise Chinese description
+		// ------------------------------------------------------------------------
+		// Risk semantics (color dot):
+		//   green  — read-only, no side effects on remote or local state
+		//   yellow — reversible write: issue / PR / branch / fork sync
+		//   red    — creates a resource (new repo, new release), directly
+		//            mutates a branch tip without a PR review surface
+	 //            (push_files / create_or_update_file), or pulls code onto
+		//            this machine (clone). Red tools are the only ones the
+		//            actions cost guard refuses against.
+		const TOOL_LIST = [
+			// ── green: read-only ────────────────────────────────────────
+			{ name: 'github_get_me', risk: 'green', desc: '查询登录身份' },
+			{ name: 'github_get_repository', risk: 'green', desc: '查看仓库信息' },
+			{ name: 'github_get_file_contents', risk: 'green', desc: '读取仓库文件' },
+			{ name: 'github_get_file_tree', risk: 'green', desc: '列出目录树' },
+			{ name: 'github_list_commits', risk: 'green', desc: '列出提交历史' },
+			{ name: 'github_list_contributors', risk: 'green', desc: '列出贡献者' },
+			{ name: 'github_list_languages', risk: 'green', desc: '语言占比' },
+			{ name: 'github_list_tags', risk: 'green', desc: '列出 tag' },
+			{ name: 'github_list_releases', risk: 'green', desc: '列出发布版本' },
+			{ name: 'github_latest_release', risk: 'green', desc: '查最新发布' },
+			{ name: 'github_list_starred', risk: 'green', desc: '读取 star 列表' },
+			{ name: 'github_list_forks', risk: 'green', desc: '读取我的 fork' },
+			{ name: 'github_list_watched', risk: 'green', desc: '读取 watch 列表' },
+			{ name: 'github_list_notifications', risk: 'green', desc: '读取通知收件箱' },
+			{ name: 'github_list_my_repositories', risk: 'green', desc: '读取我的所有仓库' },
+			{ name: 'github_get_commit_activity', risk: 'green', desc: '查询提交活跃度' },
+			{ name: 'github_search_repositories', risk: 'green', desc: '搜索仓库' },
+			{ name: 'github_search_code', risk: 'green', desc: '搜索代码' },
+			{ name: 'github_search_issues', risk: 'green', desc: '搜索议题与 PR' },
+			{ name: 'github_list_issues', risk: 'green', desc: '列出开放议题' },
+			{ name: 'github_get_issue', risk: 'green', desc: '查看单个议题' },
+			{ name: 'github_list_pull_requests', risk: 'green', desc: '列出 PR' },
+			{ name: 'github_get_pull_request', risk: 'green', desc: '查看单个 PR' },
+			// ── yellow: reversible writes ────────────────────────────────
+			{ name: 'github_create_issue', risk: 'yellow', desc: '创建新议题' },
+			{ name: 'github_update_issue', risk: 'yellow', desc: '修改或关闭议题' },
+			{ name: 'github_add_issue_comment', risk: 'yellow', desc: '给议题写评论' },
+			{ name: 'github_create_pull_request', risk: 'yellow', desc: '发起 PR' },
+			{ name: 'github_create_branch', risk: 'yellow', desc: '创建分支' },
+			{ name: 'github_sync_fork', risk: 'yellow', desc: '同步 fork 到上游' },
+			// ── red: irreversible / Actions / clone ──────────────────────
+			{ name: 'github_create_or_update_file', risk: 'red', desc: '直接改 main 文件' },
+			{ name: 'github_push_files', risk: 'red', desc: '多文件提交' },
+			{ name: 'github_create_release', risk: 'red', desc: '打 tag 并发版' },
+			{ name: 'github_create_repository', risk: 'red', desc: '新建私有仓库' },
+			{ name: 'github_clone_repository', risk: 'red', desc: '克隆仓库到本机' },
+		]
+		const TOOL_NAMES = TOOL_LIST.map(t => t.name)
+		const TOOL_BY_NAME = Object.fromEntries(TOOL_LIST.map(t => [t.name, t]))
+		const GREEN_NAMES = TOOL_LIST.filter(t => t.risk === 'green').map(t => t.name)
+		const RISK_ORDER = ['green', 'yellow', 'red']
+		const RISK_LABEL = { green: '只读（无副作用）', yellow: '可逆的写', red: '不可逆 / 触发 Actions' }
+		const RISK_DOT_CLASS = { green: 'dsh-gh-risk-green', yellow: 'dsh-gh-risk-yellow', red: 'dsh-gh-risk-red' }
+
+		// What `excludeTools` becomes when a "快速预设" button is clicked.
+		//   off    → all 33 (gate never prompts)
+		//   writes → the 23 read-only tools (gate prompts on writes only)
+		//   all    → empty    (gate prompts on every github_* call)
+		function defaultListForMode(mode) {
+			if (mode === 'off') return TOOL_NAMES.slice()
+			if (mode === 'writes') return GREEN_NAMES.slice()
+			if (mode === 'all') return []
+			return null
+		}
+		const MODE_PRESET_LABEL = {
+			off: '全部免审批',
+			writes: '仅读工具免审批，写工具全部拦截',
+			all: '全部拦截审批',
+		}
+		const MODE_PRESET_BUTTON = { off: '全免审批', writes: '默认 writes', all: '全拦截' }
+
 		/** Inject the card stylesheet exactly once. */
 		function ensureStyles() {
 			if (document.getElementById('dsh-gh-settings-style')) return
 			const style = document.createElement('style')
 			style.id = 'dsh-gh-settings-style'
 			style.textContent = [
-			'.dsh-gh{display:flex;flex-direction:column;gap:20px;width:100%;max-width:640px;',
-			'color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px}',
-			'.dsh-gh-title{margin:0 0 4px;font-size:14px;font-weight:600;line-height:22px}',
-			'.dsh-gh-group{display:flex;flex-direction:column}',
-			'.dsh-gh-row{display:flex;align-items:center;justify-content:space-between;gap:8px;',
-			'padding:16px 0;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.25))}',
-			'.dsh-gh-row.stack{flex-direction:column;align-items:stretch;gap:8px}',
-			'.dsh-gh-labels{display:flex;flex-direction:column;gap:4px;min-width:0;padding-right:24px}',
-			'.dsh-gh-row.stack .dsh-gh-labels{padding-right:0}',
-			'.dsh-gh-hint{font-size:12px;font-weight:400;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
-			'.dsh-gh-hint a,.dsh-gh-help a{color:#4c8dff;text-decoration:none}',
-			'.dsh-gh-hint a:hover,.dsh-gh-help a:hover{text-decoration:underline}',
-			'.dsh-gh-inputrow{display:flex;align-items:center;gap:8px}',
-			'.dsh-gh-inputrow .dsh-gh-input{flex:1 1 auto;height:36px}',
-			'.dsh-gh-inputrow .dsh-gh-btn{flex:0 0 auto;height:32px}',
-			'.dsh-gh-select,.dsh-gh-input{font:inherit;font-size:14px;color:var(--dsw-alias-label-primary);',
-			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
-			'border:none;border-radius:18px;padding:0 14px;min-width:0}',
-			'.dsh-gh-select{cursor:pointer}',
-			'.dsh-gh-select option{color:#1f2328;background:#ffffff}',
-			'.dsh-gh-input:focus,.dsh-gh-select:focus{outline:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.45))}',
-			'.dsh-gh-btn{cursor:pointer;font:inherit;font-size:13px;line-height:22px;padding:0 14px;',
-			'border:none;border-radius:999px;white-space:nowrap;flex:0 0 auto;',
-			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
-			'color:var(--dsw-alias-label-primary)}',
-			'.dsh-gh-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2,transparent))}',
-			'.dsh-gh-btn.primary{background:var(--dsw-alias-label-primary,#111);',
-			'color:var(--dsw-alias-label-primary-foreground,#fff)}',
-			'.dsh-gh-btn.primary:hover:not(:disabled){opacity:.9;background:var(--dsw-alias-label-primary,#111)}',
-			'.dsh-gh-btn:disabled{opacity:.5;cursor:default}',
-			'.dsh-gh-btn.small{height:28px;padding:0 10px;font-size:12px}',
-			'.dsh-gh-badge{display:inline-block;font-size:11px;line-height:16px;border-radius:999px;',
-			'padding:0 8px;margin-left:8px;vertical-align:middle;',
-			'border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
-			'color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
-			'.dsh-gh-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}',
-			'.dsh-gh-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;',
-			'border-radius:999px;font-size:12px;line-height:18px;white-space:nowrap;',
-			'border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
-			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
-			'color:var(--dsw-alias-label-primary);font-family:inherit}',
-			'.dsh-gh-chip.suggest{border-style:dashed;cursor:pointer;',
-			'color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
-			'.dsh-gh-chip.suggest:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,transparent);',
-			'color:var(--dsw-alias-label-primary)}',
-			'.dsh-gh-chip-x{cursor:pointer;border:none;background:none;color:inherit;font:inherit;',
-			'font-size:13px;padding:0 0 0 2px;line-height:1}',
-			'.dsh-gh-help{font-size:12px;line-height:18px;padding:12px 14px;',
-			'border:1px dashed var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:10px;',
-			'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-1,transparent));',
-			'color:var(--dsw-alias-label-primary)}',
-			'.dsh-gh-flash{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
-			'.dsh-gh-muted{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
-			'.dsh-gh-error{font-size:12px;line-height:1.5;color:#e5534b}',
-			'.dsh-gh-check{width:17px;height:17px;cursor:pointer;accent-color:var(--dsw-alias-label-primary,#111)}',
-		].join('')
+				'.dsh-gh{display:flex;flex-direction:column;gap:20px;width:100%;max-width:680px;',
+				'color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px}',
+				'.dsh-gh-title{margin:0 0 4px;font-size:14px;font-weight:600;line-height:22px}',
+				'.dsh-gh-group{display:flex;flex-direction:column}',
+				'.dsh-gh-row{display:flex;align-items:center;justify-content:space-between;gap:8px;',
+				'padding:16px 0;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.25))}',
+				'.dsh-gh-row.stack{flex-direction:column;align-items:stretch;gap:8px}',
+				'.dsh-gh-labels{display:flex;flex-direction:column;gap:4px;min-width:0;padding-right:24px}',
+				'.dsh-gh-row.stack .dsh-gh-labels{padding-right:0}',
+				'.dsh-gh-hint{font-size:12px;font-weight:400;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+				'.dsh-gh-hint a,.dsh-gh-help a{color:#4c8dff;text-decoration:none}',
+				'.dsh-gh-hint a:hover,.dsh-gh-help a:hover{text-decoration:underline}',
+				'.dsh-gh-inputrow{display:flex;align-items:center;gap:8px}',
+				'.dsh-gh-inputrow .dsh-gh-input{flex:1 1 auto;height:36px}',
+				'.dsh-gh-inputrow .dsh-gh-btn{flex:0 0 auto;height:32px}',
+				'.dsh-gh-select,.dsh-gh-input{font:inherit;font-size:14px;color:var(--dsw-alias-label-primary);',
+				'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
+				'border:none;border-radius:18px;padding:0 14px;min-width:0}',
+				'.dsh-gh-select{cursor:pointer}',
+				'.dsh-gh-select option{color:#1f2328;background:#ffffff}',
+				'.dsh-gh-input:focus,.dsh-gh-select:focus{outline:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.45))}',
+				'.dsh-gh-btn{cursor:pointer;font:inherit;font-size:13px;line-height:22px;padding:0 14px;',
+				'border:none;border-radius:999px;white-space:nowrap;flex:0 0 auto;',
+				'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
+				'color:var(--dsw-alias-label-primary)}',
+				'.dsh-gh-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2,transparent))}',
+				'.dsh-gh-btn.primary{background:var(--dsw-alias-label-primary,#111);',
+				'color:var(--dsw-alias-label-primary-foreground,#fff)}',
+				'.dsh-gh-btn.primary:hover:not(:disabled){opacity:.9;background:var(--dsw-alias-label-primary,#111)}',
+				'.dsh-gh-btn:disabled{opacity:.5;cursor:default}',
+				'.dsh-gh-btn.small{height:28px;padding:0 10px;font-size:12px}',
+				'.dsh-gh-badge{display:inline-block;font-size:11px;line-height:16px;border-radius:999px;',
+				'padding:0 8px;margin-left:8px;vertical-align:middle;',
+				'border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
+				'color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+				'.dsh-gh-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}',
+				'.dsh-gh-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 12px;',
+				'border-radius:999px;font-size:12px;line-height:18px;white-space:nowrap;',
+				'border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
+				'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-2,transparent));',
+				'color:var(--dsw-alias-label-primary);font-family:inherit}',
+				'.dsh-gh-chip.suggest{border-style:dashed;cursor:pointer;',
+				'color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+				'.dsh-gh-chip.suggest:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,transparent);',
+				'color:var(--dsw-alias-label-primary)}',
+				'.dsh-gh-chip-x{cursor:pointer;border:none;background:none;color:inherit;font:inherit;',
+				'font-size:13px;padding:0 0 0 2px;line-height:1}',
+				'.dsh-gh-help{font-size:12px;line-height:18px;padding:12px 14px;',
+				'border:1px dashed var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:10px;',
+				'background:var(--dsw-alias-bg-module-platform,var(--dsw-alias-bg-layer-1,transparent));',
+				'color:var(--dsw-alias-label-primary)}',
+				'.dsh-gh-flash{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+				'.dsh-gh-muted{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-primary-dimmed,rgba(127,127,127,.7)))}',
+				'.dsh-gh-error{font-size:12px;line-height:1.5;color:#e5534b}',
+				'.dsh-gh-check{width:17px;height:17px;cursor:pointer;accent-color:var(--dsw-alias-label-primary,#111)}',
+				// --- 33-tool chip + risk dot (v1.0.3) ---
+				'.dsh-gh-modebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+				'.dsh-gh-modebar-label{font-size:12px;color:var(--dsw-alias-label-tertiary,rgba(127,127,127,.7))}',
+				'.dsh-gh-modebar-btn{font-size:12px;line-height:18px;height:24px;padding:0 10px;',
+				'border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:999px;',
+				'background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit}',
+				'.dsh-gh-modebar-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,transparent)}',
+				'.dsh-gh-tools-by-risk{display:flex;flex-direction:column;gap:12px}',
+				'.dsh-gh-toolgroup{display:flex;flex-direction:column;gap:6px}',
+				'.dsh-gh-toolgroup-label{font-size:11px;line-height:16px;',
+				'color:var(--dsw-alias-label-tertiary,rgba(127,127,127,.7));',
+				'display:flex;align-items:center;gap:6px;letter-spacing:.02em}',
+				'.dsh-gh-risk{width:8px;height:8px;border-radius:50%;flex:0 0 auto;',
+				'box-shadow:0 0 0 1px rgba(0,0,0,.06) inset}',
+				'.dsh-gh-risk-red{background:#e5534b}',
+				'.dsh-gh-risk-yellow{background:#d4a017}',
+				'.dsh-gh-risk-green{background:#2ea44f}',
+				'.dsh-gh-toolchip{display:inline-flex;align-items:center;gap:6px;height:26px;',
+				'padding:0 12px;border-radius:999px;font-size:12px;line-height:18px;',
+				'white-space:nowrap;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
+				'background:var(--dsw-alias-bg-module-platform,transparent);',
+				'color:var(--dsw-alias-label-primary);font-family:inherit;cursor:pointer;font:inherit;',
+				'transition:opacity .12s ease, background .12s ease;',
+				'min-width:0;justify-content:center}',
+				'.dsh-gh-toolchip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,transparent)}',
+				'.dsh-gh-toolchip:focus-visible{outline:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.45));outline-offset:1px}',
+				'.dsh-gh-toolchip.off{opacity:.42}',
+				'.dsh-gh-toolchip.off:hover:not(:disabled){opacity:.7}',
+				'.dsh-gh-toolchip.on .dsh-gh-toolname{font-weight:500}',
+				'.dsh-gh-toolname{display:inline-block;text-align:center;min-width:0}',
+			].join('')
 			document.head.appendChild(style)
 		}
 
@@ -115,21 +240,18 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Native OS folder chooser via the connection's RPC channel
-		 * (`/host` channel, `pickDirectory` endpoint). Returns the picked
-		 * absolute path, null on user cancel, THROWS readable errors on
-		 * failure/no-surface. Older hosts without the RPC channel fall back
-		 * to a no-surface error so the user can still type the path by hand.
+		 * Native OS folder chooser via the `uiWorkspace` service. The pre-0.9.3
+		 * code path (`connection.rpc.call('/host', 'pickDirectory', {})`) was
+		 * retired in DSH 0.1.5-rc.1 — the rpc channel is still mounted but the
+		 * `/host/pickDirectory` endpoint is not, so the older call would
+		 * silently no-op (zero console error, zero UI feedback). Returns the
+		 * picked absolute path, throws a readable error otherwise.
 		 */
 		async function pickDirectory(ctx) {
-			const connection = ctx.connection
-			if (!connection || !connection.rpc || typeof connection.rpc.call !== 'function')
-				throw new Error('此宿主未提供目录选择器（connection.rpc 不可用），请手动输入路径')
-			const res = await connection.rpc.call('/host', 'pickDirectory', {})
-			if (res && res.ok === false) throw new Error(res.message || '目录选择请求被宿主拒绝')
-			const value = res && typeof res === 'object' && 'value' in res ? res.value : res
-			if (value && typeof value === 'object' && typeof value.path === 'string') return value.path
-			return null
+			const ws = ctx.uiWorkspace
+			if (!ws || typeof ws.pickDirectory !== 'function')
+				throw new Error('此宿主未提供目录选择器（uiWorkspace.pickDirectory 不可用），请手动输入路径')
+			return ws.pickDirectory()
 		}
 
 		function makePanel(ctx) {
@@ -165,9 +287,9 @@ window.__ModuleLoader__.load({
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, 'GitHub Token（PAT）',
 							h('span', { className: 'dsh-gh-badge' }, configured ? '已设置' : '未设置')),
-							!configured ? h('span', { className: 'dsh-gh-hint' },
-								'还没有令牌？点「提示」有新手指引，一键创建、权限自动勾好。') : null,
-						),
+						!configured ? h('span', { className: 'dsh-gh-hint' },
+							'还没有令牌？点「提示」有新手指引，一键创建、权限自动勾好。') : null,
+					),
 					h('div', { className: 'dsh-gh-inputrow' },
 						h('input', {
 							className: 'dsh-gh-input', type: 'password', spellCheck: false,
@@ -203,101 +325,124 @@ window.__ModuleLoader__.load({
 				)
 			}
 
-
-			/** One-line Chinese description per tool — hover tooltip + click feedback. */
-			const TOOL_DESC = {
-				github_get_me: '查询登录身份与凭证状态',
-				github_get_repository: '查看仓库信息',
-				github_get_file_contents: '读取仓库文件',
-				github_list_commits: '列出提交历史',
-				github_search_repositories: '搜索仓库',
-				github_search_code: '搜索代码',
-				github_search_issues: '搜索议题和 PR',
-				github_list_issues: '列出开放议题',
-				github_get_issue: '查看单个议题',
-				github_list_releases: '列出发布版本',
-				github_latest_release: '查最新发布版本',
-				github_list_starred: '读取 star 列表',
-				github_list_forks: '读取我的 fork 及上游动态',
-				github_list_watched: '读取 watch 订阅列表',
-				github_create_issue: '创建新议题',
-				github_update_issue: '修改或关闭议题',
-				github_add_issue_comment: '给议题写评论',
-				github_create_branch: '创建分支',
-				github_create_or_update_file: '提交单个文件改动',
-				github_push_files: '多文件一次提交',
-				github_create_pull_request: '发起 PR',
-				github_create_release: '打 tag 并发版',
-				github_sync_fork: '把 fork 同步到上游最新',
-				github_create_repository: '自动新建私有仓库',
+			// ------------------------------------------------------------------------
+			// One tool chip: a colored risk dot + a label that swaps english ↔
+			// Chinese on hover. The chip stays the same physical size — only the
+			// inner `<span>` text changes (so layout never shifts). Tapping the
+			// chip toggles its presence in `excludeTools`; opacity 0.42 marks
+			// untoggled (intercepted) state so the currently-exempt set is
+			// obvious at a glance.
+			// ------------------------------------------------------------------------
+			function ToolChip({ tool, checked, busy, onToggle }) {
+				const [hovered, setHovered] = useState(false)
+				const cls = 'dsh-gh-toolchip ' + (checked ? 'on' : 'off')
+				return h('button', {
+					className: cls,
+					type: 'button',
+					disabled: busy,
+					onMouseEnter: () => setHovered(true),
+					onMouseLeave: () => setHovered(false),
+					onFocus: () => setHovered(true),
+					onBlur: () => setHovered(false),
+					onClick: () => onToggle(tool.name),
+					'aria-label': tool.desc + '（' + (checked ? '已豁免' : '已拦截') + '）',
+					'aria-pressed': !!checked,
+					title: tool.desc,
+				},
+					h('span', { className: 'dsh-gh-risk ' + RISK_DOT_CLASS[tool.risk] }),
+					h('span', { className: 'dsh-gh-toolname' }, hovered ? tool.desc : tool.name),
+				)
 			}
-			const toolDesc = name => TOOL_DESC[name] || ('调用工具 ' + name)
 
-			/** Read-only tools commonly worth exempting when the gate is set to "all". */
-			const SUGGESTED_EXEMPT = [
-				'github_get_me', 'github_get_file_contents', 'github_search_repositories',
-				'github_search_code', 'github_list_issues', 'github_latest_release',
-				'github_list_starred', 'github_list_forks',
-			]
-
+			// ------------------------------------------------------------------------
+			// Exempt-tools panel: 33 chips grouped by risk color, with three
+			// "快速预设" buttons above the list. Toggling a chip writes
+			// `excludeTools` directly (the `mode` field is left alone for
+			// back-compat with users who have it set in their settings.yaml).
+			// Tapping a preset button overwrites `excludeTools` with the
+			// matching default set in one shot.
+			// ------------------------------------------------------------------------
 			function ExcludeToolsRow({ gate, busy, onWrite }) {
 				const current = Array.isArray(gate.value && gate.value.excludeTools)
 					? gate.value.excludeTools : []
-				const [draft, setDraft] = useState('')
 				const [flash, setFlash] = useState('')
 				useEffect(() => {
 					if (!flash) return
-					const timer = setTimeout(() => setFlash(''), 3500)
-					return () => clearTimeout(timer)
+					const t = setTimeout(() => setFlash(''), 2500)
+					return () => clearTimeout(t)
 				}, [flash])
-				const removeOne = name => {
-					onWrite({ op: 'set', path: ['excludeTools'], value: current.filter(n => n !== name) }, () => {})
-					setFlash('已恢复审批：' + toolDesc(name))
+
+				const writeList = (nextList, label) => onWrite(
+					{ op: 'set', path: ['excludeTools'], value: nextList },
+					() => setFlash(label),
+				)
+
+				const toggle = name => {
+					const t = TOOL_BY_NAME[name]
+					const flashText = current.includes(name)
+						? '已恢复审批：' + t.desc
+						: '已免审批：' + t.desc
+					const next = current.includes(name)
+						? current.filter(n => n !== name)
+						: current.concat([name])
+					writeList(next, flashText)
 				}
-				const addOne = raw => {
-					const v = String(raw || '').trim()
-					if (!v || current.includes(v)) return
-					onWrite({ op: 'set', path: ['excludeTools'], value: [...current, v] }, () => setDraft(''))
-					setFlash('已免审批：' + toolDesc(v))
+
+				const applyPreset = mode => {
+					const next = defaultListForMode(mode)
+					if (next === null) return
+					writeList(next, '已应用预设「' + MODE_PRESET_LABEL[mode] + '」')
 				}
-				const suggestions = SUGGESTED_EXEMPT.filter(n => !current.includes(n))
+
+				const groups = RISK_ORDER.map(risk => ({
+					risk,
+					label: RISK_LABEL[risk],
+					tools: TOOL_LIST.filter(t => t.risk === risk),
+				}))
+
 				return h('div', { className: 'dsh-gh-row stack' },
 					h('div', { className: 'dsh-gh-labels' },
 						h('span', null, '豁免工具（免审批）',
-							h('span', { className: 'dsh-gh-badge' }, String(current.length))),
-						h('span', { className: 'dsh-gh-hint' }, '悬停可看用途；点 × 移除，点虚线胶囊加入。只建议豁免只读工具。'),
+							h('span', { className: 'dsh-gh-badge' }, String(current.length) + ' / ' + TOOL_NAMES.length)),
+						h('span', { className: 'dsh-gh-hint' },
+							'悬停胶囊直接显示中文描述，按风险标红黄绿；点预设一键覆盖，手点胶囊走自定义。'),
 					),
-					current.length
-						? h('div', { className: 'dsh-gh-chips' },
-							current.map(name => h('span', {
-								key: name, className: 'dsh-gh-chip', title: toolDesc(name),
-							},
-								name,
-								h('button', {
-									className: 'dsh-gh-chip-x', title: '移除（恢复审批）', disabled: busy,
-									onClick: () => removeOne(name),
-								}, '×'))))
-						: h('div', { className: 'dsh-gh-muted' }, '当前没有豁免——门控范围内的每次调用都会弹审批。'),
-					flash ? h('div', { className: 'dsh-gh-flash' }, flash) : null,
-					suggestions.length
-						? h('div', { className: 'dsh-gh-chips' },
-							h('span', { className: 'dsh-gh-hint' }, '常用只读：'),
-							suggestions.map(name => h('button', {
-								key: name, className: 'dsh-gh-chip suggest', disabled: busy,
-								title: toolDesc(name),
-								onClick: () => addOne(name),
-							}, '+ ' + name)))
-						: null,
-					h('div', { className: 'dsh-gh-inputrow' },
-						h('input', {
-							className: 'dsh-gh-input', spellCheck: false, value: draft, disabled: busy,
-							placeholder: '自定义工具名，如 github_get_pull_request',
-							onChange: e => setDraft(e.target.value),
-						}),
+					h('div', { className: 'dsh-gh-modebar' },
+						h('span', { className: 'dsh-gh-modebar-label' }, '快速预设：'),
+						RISK_ORDER.length === 0 ? null : h('button', {
+							key: 'off', className: 'dsh-gh-modebar-btn', disabled: busy,
+							onClick: () => applyPreset('off'),
+							title: MODE_PRESET_LABEL.off,
+						}, MODE_PRESET_BUTTON.off),
 						h('button', {
-							className: 'dsh-gh-btn primary', disabled: busy || !draft.trim(),
-							onClick: () => addOne(draft),
-						}, '添加'))
+							key: 'writes', className: 'dsh-gh-modebar-btn', disabled: busy,
+							onClick: () => applyPreset('writes'),
+							title: MODE_PRESET_LABEL.writes,
+						}, MODE_PRESET_BUTTON.writes),
+						h('button', {
+							key: 'all', className: 'dsh-gh-modebar-btn', disabled: busy,
+							onClick: () => applyPreset('all'),
+							title: MODE_PRESET_LABEL.all,
+						}, MODE_PRESET_BUTTON.all),
+					),
+					h('div', { className: 'dsh-gh-tools-by-risk' },
+						groups.map(g => h('div', { key: g.risk, className: 'dsh-gh-toolgroup' },
+							h('div', { className: 'dsh-gh-toolgroup-label' },
+								h('span', { className: 'dsh-gh-risk ' + RISK_DOT_CLASS[g.risk] }),
+								g.label + '（' + g.tools.length + '）',
+							),
+							h('div', { className: 'dsh-gh-chips' },
+								g.tools.map(t => h(ToolChip, {
+									key: t.name,
+									tool: t,
+									checked: current.includes(t.name),
+									busy,
+									onToggle: toggle,
+								})),
+							),
+						)),
+					),
+					flash ? h('div', { className: 'dsh-gh-flash' }, flash) : null,
 				)
 			}
 
@@ -422,11 +567,11 @@ window.__ModuleLoader__.load({
 							label: '自动新建仓库', hint: '允许 agent 创建新的私有仓库（强制 private，无法创建公开仓库；需令牌含 Administration 权限）',
 							checked: !!(t.value && t.value.enableRepoCreation),
 							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableRepoCreation'], value: v }),
- 						}),
- 						h(ToggleRow, {
- 							label: '本地克隆工具', hint: '允许 agent 把仓库（含私有仓）克隆到本机目录；令牌只经环境变量注入单个 git 子进程，不进命令行、URL、.git/config 和日志',
- 							checked: !!(t.value && t.value.enableCloneTools),
- 							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableCloneTools'], value: v }),
+						}),
+						h(ToggleRow, {
+							label: '本地克隆工具', hint: '允许 agent 把仓库（含私有仓）克隆到本机目录；令牌只经环境变量注入单个 git 子进程，不进命令行、URL、.git/config 和日志',
+							checked: !!(t.value && t.value.enableCloneTools),
+							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableCloneTools'], value: v }),
 						}),
 						h(TextRow, {
 							label: '默认克隆目录', field: 'workspaceRoot',
@@ -496,7 +641,7 @@ window.__ModuleLoader__.load({
 			}
 		}
 
-		module.exports.inject = ['settingsScope', 'slots']
+		module.exports.inject = ['settingsScope', 'slots', 'uiWorkspace']
 		module.exports.apply = apply
 		return module.exports
 	},
