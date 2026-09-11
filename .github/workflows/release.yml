@@ -1,20 +1,24 @@
-# Release: on a v* tag, create a GitHub Release with generated notes.
-# npm publishing is OPTIONAL: it runs only when an NPM_TOKEN secret exists
-# (registry token with publish rights). Until then the job is skipped and the
-# GitHub Release alone marks the version.
-#
-# NOTE: `secrets` is NOT available in step-level `if:` expressions — the
-# presence check goes through a job-level env var instead.
-name: Release
+name: release
 
+# Trigger: any v* tag push. Publishes to npm via Trusted Publishing (OIDC,
+# no token needed once the GitHub repo is added to npm's trusted
+# publishers list) and writes a GitHub Release with auto-generated notes.
+#
+# A manual workflow_dispatch is also available; it defaults to dry-run so a
+# tag-pushed dry-run can verify the pipeline before turning real-publish on.
 on:
   push:
     tags: ['v*']
-  # Manual dispatch lets the release pipeline be tested without burning tags
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'If true, skips npm publish (runs only typecheck + build + smoke)'
+        required: false
+        default: 'true'
 
 permissions:
   contents: write
+  id-token: write   # Trusted Publishing OIDC token
 
 concurrency:
   group: release-${{ github.ref }}
@@ -23,27 +27,22 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Hard cap: hung steps must never bill past 15 minutes (2026-08-28)
     timeout-minutes: 15
     env:
+      # NPM_TOKEN fallback for hosts that haven't migrated to Trusted
+      # Publishing yet. When the secret is empty, the publish step skips.
       HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: '24'
           cache: npm
 
-      # Same root cause as ci.yml — fixed via repo .npmrc (legacy-peer-deps).
       - name: Install dependencies
         timeout-minutes: 5
-        run: npm ci
-
-      - name: Retry install
-        if: failure()
-        timeout-minutes: 5
-        run: npm ci
+        run: npm ci --no-audit --fund=false
 
       - name: Verify (typecheck + test + build)
         run: |
@@ -51,15 +50,42 @@ jobs:
           npm test
           npm run build
 
+      - name: Smoke-load (registries, settings, gate, skill)
+        # The verify-load script is what the README documents as the
+        # "boot the plugin in a headless profile and assert every bundle
+        # mounted + every registered tool responds" gate. A short failure
+        # here is much cheaper than a 400 on the npm registry.
+        run: node scripts/verify-load.mjs
+
+      - name: Publish to npm (Trusted Publishing via OIDC)
+        if: env.HAS_NPM_TOKEN != 'true' && (github.event_name == 'push' || inputs.dry_run != 'true')
+        # Trusted Publishing: no NPM_TOKEN required. The OIDC token issued
+        # by GitHub Actions is verified by npm against the trusted
+        # publishers list (set up once at
+        # https://www.npmjs.com/settings/trusted-publishers — add
+        # vclike/dsh-github-companion with workflow filename `release.yml`).
+        run: npm publish --provenance --access public
+
+      - name: Publish to npm (NPM_TOKEN fallback for pre-TP hosts)
+        if: env.HAS_NPM_TOKEN == 'true' && (github.event_name == 'push' || inputs.dry_run != 'true')
+        # HMAC-stamped token lives in repo secrets. The provenance flag is
+        # rejected by Trusted Publishing workflows without an id-token, but
+        # it works fine here.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          npm publish --access public
+
       - name: GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
 
-      - name: Publish to npm (only when NPM_TOKEN is configured)
-        if: env.HAS_NPM_TOKEN == 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish summary
+        if: success()
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
-          npm publish
+          version=$(node -p "require('./package.json').version")
+          echo "## v$version released" >> "$GITHUB_STEP_SUMMARY"
+          echo "- npm: https://www.npmjs.com/package/dsh-github-companion" >> "$GITHUB_STEP_SUMMARY"
+          echo "- GitHub release: https://github.com/vclike/dsh-github-companion/releases/tag/v$version" >> "$GITHUB_STEP_SUMMARY"

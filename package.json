@@ -1,6 +1,6 @@
 {
   "name": "dsh-github-companion",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "DeepSeek Harness 插件：AI 操作 GitHub 的完整集成——33 个 REST/GraphQL 工具 + 进程内权限门 + 成本纪律 companion skill，零 gh CLI 依赖。",
   "license": "MIT",
   "type": "module",
@@ -47,7 +47,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "prepublishOnly": "npm run typecheck && npm run build && npm test"
+    "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "@deepseek-ai/cordis": ">=4.0.0",
