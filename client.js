@@ -192,25 +192,31 @@ window.__ModuleLoader__.load({
 				'.dsh-gh-risk-red{background:#e5534b}',
 				'.dsh-gh-risk-yellow{background:#d4a017}',
 				'.dsh-gh-risk-green{background:#2ea44f}',
-				// Fixed min-width prevents the chip from shrinking when its label
-				// swaps between the long english name and the shorter chinese
-				// description — without this, flex-wrap reflows the row and the
-				// mouse hovers into the next chip, recursively. 7.5rem holds the
-				// longest description ("读取我的所有仓库") comfortably; longer
-				// english names overflow visually but the row never reflows.
-				'.dsh-gh-toolchip{display:inline-flex;align-items:center;gap:6px;height:26px;',
+				// v1.0.5: two absolutely-positioned label layers inside one chip.
+				// The english name is in normal flow (so it determines the
+				// chip's width); the chinese description overlays with
+				// `position: absolute; inset: 0;` and never affects layout.
+				// `:hover` / `:focus-visible` toggle which layer is visible
+				// via opacity — no JS state, no re-render, no width change,
+				// no row reflow, no hover-jitter loop.
+				'.dsh-gh-toolchip{position:relative;display:inline-flex;align-items:center;gap:6px;height:26px;',
 				'padding:0 12px;border-radius:999px;font-size:12px;line-height:18px;',
 				'white-space:nowrap;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));',
 				'background:var(--dsw-alias-bg-module-platform,transparent);',
 				'color:var(--dsw-alias-label-primary);font-family:inherit;cursor:pointer;font:inherit;',
-				'transition:opacity .12s ease, background .12s ease;',
-				'min-width:7.5rem;justify-content:center;max-width:100%;overflow:hidden;text-overflow:ellipsis}',
+				'transition:opacity .12s ease, background .12s ease}',
 				'.dsh-gh-toolchip:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover,transparent)}',
 				'.dsh-gh-toolchip:focus-visible{outline:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.45));outline-offset:1px}',
 				'.dsh-gh-toolchip.off{opacity:.42}',
 				'.dsh-gh-toolchip.off:hover:not(:disabled){opacity:.7}',
-				'.dsh-gh-toolchip.on .dsh-gh-toolname{font-weight:500}',
-				'.dsh-gh-toolname{display:inline-block;text-align:center}',
+				'.dsh-gh-toolname{position:relative;display:inline-flex;align-items:center;justify-content:center}',
+				'.dsh-gh-toolname-en,.dsh-gh-toolname-zh{display:block;white-space:nowrap;text-align:center;transition:opacity .12s ease}',
+				// The chinese layer fills the parent and centers its text;
+				// it does NOT take part in layout (absolute positioning),
+				// so the chip's width is whatever the english layer needs.
+				'.dsh-gh-toolname-zh{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;font-weight:500}',
+				'.dsh-gh-toolchip:hover .dsh-gh-toolname-en,.dsh-gh-toolchip:focus-visible .dsh-gh-toolname-en{opacity:0}',
+				'.dsh-gh-toolchip:hover .dsh-gh-toolname-zh,.dsh-gh-toolchip:focus-visible .dsh-gh-toolname-zh{opacity:1}',
 			].join('')
 			document.head.appendChild(style)
 		}
@@ -357,23 +363,28 @@ window.__ModuleLoader__.load({
 			// obvious at a glance.
 			// ------------------------------------------------------------------------
 			function ToolChip({ tool, checked, busy, onToggle }) {
-				const [hovered, setHovered] = useState(false)
+				// v1.0.5: two-layer span (en / zh) absolutely positioned; CSS
+				// `:hover` toggles their opacity. The chip's width is always
+				// the english name's width — chinese description overlays via
+				// `position: absolute` so it never enters layout flow. The
+				// React-state `hovered` toggle from v1.0.3/v1.0.4 is gone,
+				// which means no per-hover re-render and no chance of the
+				// row reflowing when the label swaps.
 				const cls = 'dsh-gh-toolchip ' + (checked ? 'on' : 'off')
 				return h('button', {
 					className: cls,
 					type: 'button',
 					disabled: busy,
-					onMouseEnter: () => setHovered(true),
-					onMouseLeave: () => setHovered(false),
-					onFocus: () => setHovered(true),
-					onBlur: () => setHovered(false),
 					onClick: () => onToggle(tool.name),
 					'aria-label': tool.desc + '（' + (checked ? '已豁免' : '已拦截') + '）',
 					'aria-pressed': !!checked,
 					title: tool.desc,
 				},
 					h('span', { className: 'dsh-gh-risk ' + RISK_DOT_CLASS[tool.risk] }),
-					h('span', { className: 'dsh-gh-toolname' }, hovered ? tool.desc : tool.name),
+					h('span', { className: 'dsh-gh-toolname' },
+						h('span', { className: 'dsh-gh-toolname-en' }, tool.name),
+						h('span', { className: 'dsh-gh-toolname-zh' }, tool.desc),
+					),
 				)
 			}
 

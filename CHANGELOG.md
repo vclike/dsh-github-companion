@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.0.5 (2026-09-11)
+
+### Fixes
+
+- **Hover-jitter chip layout, for real this time.**
+  v1.0.4 used `min-width: 7.5rem; overflow: hidden; text-overflow: ellipsis`
+  to keep the chip width stable while the label swapped. That addressed
+  the symptom — chip width no longer changed — but the layout still
+  reflowed on long english names (`github_list_my_repositories` did not
+  fit in 7.5rem, so the row reordered). v1.0.5 rewrites the chip as
+  two absolutely-positioned label layers and lets the english name
+  drive width; the chinese description overlays via
+  `position: absolute; inset: 0;` and never enters layout flow.
+
+  ```
+  v1.0.3: hover → setState → re-render → label swaps → width changes → row reflows
+  v1.0.4: hover → setState → re-render → label swaps → width FIXED, but long names overflow
+  v1.0.5: hover → CSS opacity swap → NO re-render → NO width change → NO row reflow
+  ```
+
+  Effects:
+  - Chip width is exactly the english name's natural width — long and
+    short tool names each get a chip that fits; no truncation needed.
+  - Hover/focus-visible fades the english layer to 0 and the chinese
+    layer to 1 (transition `.12s`). The chinese text is centered inside
+    the same footprint via `display: flex; align-items: center;
+    justify-content: center`.
+  - `useState` is no longer needed in `ToolChip`. The `hovered` state
+    and the per-hover re-render are gone — purely CSS, no JS hover
+    loop, no chance of recursive mouseenter/leave through a reflowing
+    row.
+
+No `src/*.ts` changes.
+
 ## 1.0.4 (2026-09-11)
 
 ### Fixes
