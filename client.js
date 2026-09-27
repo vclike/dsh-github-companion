@@ -2,8 +2,10 @@
  * dsh-github-companion — browser half (settings card).
  *
  * Contributes one "GitHub" section to the DSH settings page, rendering the
- * backend-registered `github-tools` and `github-gate` namespaces through the
- * official settings surface (describe + mutate over `ctx.settingsScope`).
+ * backend `github-tools` / `github-permission-gate` entries (0.1.7 entry
+ * configs; `github-gate` namespace before that) through the official
+ * settings surface (describe + mutate over `ctx.settingsScope`, re-provided
+ * on 0.1.7 by the dsh-settings-scope-compat bridge).
  *
  * Hand-written against the shared client externals (`react` via the module
  * loader's require) — same shape as dsh-status-rotator's browser half, so no
@@ -221,19 +223,36 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(style)
 		}
 
-		/** Fetch the describe mirror and pick out our two namespaces. */
+		/** Fetch the settings view and pick out our two entries. */
 		async function describeOurs(ctx) {
 			const binder = ctx.settingsScope
 			if (!binder || typeof binder.describe !== 'function')
 				throw new Error('settingsScope service unavailable')
 			const face = binder.describe()
-			await face.ensure()
-			const snap = face.getSnapshot()
-			if (snap.status === 'unavailable')
-				throw new Error(snap.error || 'settings mirror unavailable')
-			const list = (snap.view && snap.view.namespaces) || []
+			let list
+			if (face && typeof face.ensure === 'function') {
+				// DSH 0.1.2–0.1.5: the shared describe mirror face.
+				await face.ensure()
+				const snap = face.getSnapshot()
+				if (snap.status === 'unavailable')
+					throw new Error(snap.error || 'settings mirror unavailable')
+				list = (snap.view && snap.view.namespaces) || []
+			} else if (Array.isArray(face)) {
+				// DSH 0.1.7+: dsh-settings-scope-compat re-provides settingsScope
+				// over configForms, whose describe() is a plain SettingsDescriptor[]
+				// keyed by profile entry id — the bundle patch row ids
+				// `github-tools` / `github-permission-gate`.
+				list = face
+			} else {
+				throw new Error('settings describe returned an unsupported shape')
+			}
 			const byNs = new Map(list.map(d => [d.ns, d]))
-			return { tools: byNs.get(NS_TOOLS) || null, gate: byNs.get(NS_GATE) || null }
+			return {
+				tools: byNs.get(NS_TOOLS) || null,
+				// v1.1.0: on 0.1.7 the gate form is keyed by the entry id
+				// `github-permission-gate` (0.1.5 kept the `github-gate` namespace).
+				gate: byNs.get(NS_GATE) || byNs.get('github-permission-gate') || null,
+			}
 		}
 
 		/** One path-op write against a namespace's user layer. */
@@ -256,6 +275,18 @@ window.__ModuleLoader__.load({
 		function secretSet(descriptor, field) {
 			const secrets = (descriptor && descriptor.secrets) || []
 			return secrets.some(s => Array.isArray(s.path) && s.path.join('.') === field && s.set === true)
+		}
+
+		/**
+		 * Write target for a descriptor: its own key. On DSH 0.1.7 that is the
+		 * profile entry id (configForms key); before 0.1.5 it is the settings
+		 * namespace id. Hardcoding the old constants would send gate writes to
+		 * a form that no longer exists.
+		 */
+		function nsOf(descriptor, fallback) {
+			return descriptor && typeof descriptor.ns === 'string' && descriptor.ns
+				? descriptor.ns
+				: fallback
 		}
 
 		/**
@@ -627,7 +658,7 @@ window.__ModuleLoader__.load({
 				const anyPresent = !!(t || g)
 				if (!anyPresent)
 					return h('div', { className: 'dsh-gh-muted' },
-						'未发现 github-tools / github-gate 命名空间——插件可能未启用。')
+						'未发现 github-tools / github-permission-gate 设置项——插件可能未启用。')
 
 				const tokenSource = t && secretSet(t, 'token')
 					? '设置中保存的 PAT'
@@ -637,27 +668,27 @@ window.__ModuleLoader__.load({
 					t ? h(Group, { title: 'GitHub 工具' },
 						h(TokenRow, {
 							tools: t, busy,
-							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
+							onWrite: (op, after) => write(nsOf(t, NS_TOOLS), t, op, after),
 						}),
 						h(ToggleRow, {
 							label: 'Issue 写操作', hint: 'create / update / comment 三类写工具的注册开关',
 							checked: !!(t.value && t.value.enableIssueWrites),
-							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableIssueWrites'], value: v }),
+							onChange: v => write(nsOf(t, NS_TOOLS), t, { op: 'set', path: ['enableIssueWrites'], value: v }),
 						}),
 						h(ToggleRow, {
 							label: 'Git 数据写操作', hint: '分支 / 提交文件 / PR 等（含两个 PR 只读工具）',
 							checked: !!(t.value && t.value.enableGitDataTools),
-							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableGitDataTools'], value: v }),
+							onChange: v => write(nsOf(t, NS_TOOLS), t, { op: 'set', path: ['enableGitDataTools'], value: v }),
 						}),
 						h(ToggleRow, {
 							label: '自动新建仓库', hint: '允许 agent 创建新的私有仓库（强制 private，无法创建公开仓库；需令牌含 Administration 权限）',
 							checked: !!(t.value && t.value.enableRepoCreation),
-							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableRepoCreation'], value: v }),
+							onChange: v => write(nsOf(t, NS_TOOLS), t, { op: 'set', path: ['enableRepoCreation'], value: v }),
 						}),
 						h(ToggleRow, {
 							label: '本地克隆工具', hint: '允许 agent 把仓库（含私有仓）克隆到本机目录；令牌只经环境变量注入单个 git 子进程，不进命令行、URL、.git/config 和日志',
 							checked: !!(t.value && t.value.enableCloneTools),
-							onChange: v => write(NS_TOOLS, t, { op: 'set', path: ['enableCloneTools'], value: v }),
+							onChange: v => write(nsOf(t, NS_TOOLS), t, { op: 'set', path: ['enableCloneTools'], value: v }),
 						}),
 						h(TextRow, {
 							label: '默认克隆目录', field: 'workspaceRoot',
@@ -666,7 +697,7 @@ window.__ModuleLoader__.load({
 							hint: '克隆落点优先级：当前会话的工作区 → 此目录 → 询问你。适合存放临时参考的克隆；目录不存在时自动创建。',
 							placeholder: '例如 D:\\work_space\\github',
 							value: t.value && t.value.workspaceRoot, busy,
-							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
+							onWrite: (op, after) => write(nsOf(t, NS_TOOLS), t, op, after),
 							onBrowse: () => pickDirectory(ctx),
 						}),
 						h(TextRow, {
@@ -674,7 +705,7 @@ window.__ModuleLoader__.load({
 							hint: '访问 api.github.com 走的 HTTP(S) 代理。Node 不读系统代理，直连超时才需要填；改动实时生效。',
 							placeholder: '例如 http://127.0.0.1:7890',
 							value: t.value && t.value.proxyUrl, busy,
-							onWrite: (op, after) => write(NS_TOOLS, t, op, after),
+							onWrite: (op, after) => write(nsOf(t, NS_TOOLS), t, op, after),
 						}),
 						h('div', { className: 'dsh-gh-muted' },
 							'当前凭证来源：' + tokenSource + '。改动实时生效。'),
@@ -688,7 +719,7 @@ window.__ModuleLoader__.load({
 								{ value: 'writes', label: 'writes — 拦截写工具' },
 								{ value: 'all', label: 'all — 拦截所有 github_* 工具' },
 							],
-							onChange: v => write(NS_GATE, g, { op: 'set', path: ['mode'], value: v }),
+							onChange: v => write(nsOf(g, NS_GATE), g, { op: 'set', path: ['mode'], value: v }),
 						}),
 						h(SelectRow, {
 							label: '拦截动作', value: (g.value && g.value.action) || 'ask',
@@ -696,12 +727,12 @@ window.__ModuleLoader__.load({
 								{ value: 'ask', label: 'ask — 弹出审批' },
 								{ value: 'deny', label: 'deny — 直接拒绝' },
 							],
-							onChange: v => write(NS_GATE, g, { op: 'set', path: ['action'], value: v }),
+							onChange: v => write(nsOf(g, NS_GATE), g, { op: 'set', path: ['action'], value: v }),
 						}),
 						h(ExcludeToolsRow, {
 							gate: g, busy,
 							writeError: writeError,
-							onWrite: (op, after) => write(NS_GATE, g, op, after),
+							onWrite: (op, after) => write(nsOf(g, NS_GATE), g, op, after),
 						}),
 						writeError ? h('div', { className: 'dsh-gh-error' }, '写入失败：' + writeError) : null,
 					) : null,

@@ -5,8 +5,10 @@
 # 使用技能入口导出 name: 'github-companion-usage'（v0.9.0 起并入本包，取代独立
 # dsh-github-guide bundle——旧装用户请删掉 dsh-github-guide 行避免同名技能双注册）。
 # 三者都是普通 cordis 插件行——不想要门控时删除第二行（或把 mode 设为 off）即可。
-# v1.0.0 起所有 dsh-plugin-github 字面都换成 dsh-github-companion，但 settings
-# 命名空间（github-tools / github-gate）保持不变——settings.yaml 不需要迁移。
+# v1.0.0 起所有 dsh-plugin-github 字面都换成 dsh-github-companion；行 id
+# （github-tools / github-permission-gate）保持不变。v1.1.0 起设置即 entry
+# config：DSH 0.1.7 把导出的 Config schema 投影进设置界面，直接在本行加
+# `config:` 或在设置界面改；0.1.5 上组合层 config 同样是值的来源。
 - insert:
     - id: github-tools
       name: dsh-github-companion

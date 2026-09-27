@@ -8,7 +8,7 @@ import { apply as applyGate } from '../src/gate.ts'
 
 /** Minimal Cordis capture harness: records the tools/pre-execute listener. */
 function makeCtx(
-  section: GithubGateSection,
+  config: GithubGateSection,
   env: {
     defaultMode?: 'read-only' | 'workspace-write' | 'danger-full-access'
     approvalPolicy?: 'ask' | 'never'
@@ -20,24 +20,12 @@ function makeCtx(
   let listener:
     | ((exec: unknown, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>)
     | undefined
-  const watchers: Array<(next: GithubGateSection) => void> = []
   const ctx: Record<string, unknown> = {
     on(event: string, handler: unknown) {
       if (event === 'tools/pre-execute') listener = handler as typeof listener
     },
     effect(fn: () => unknown) {
       fn()
-    },
-    settings: {
-      register(_ns: string, _schema: unknown, _options?: unknown) {
-        return {
-          get: () => section,
-          watch(callback: (next: GithubGateSection) => void) {
-            watchers.push(callback)
-            return () => {}
-          },
-        }
-      },
     },
     logger: { info() {}, warn() {}, error() {} },
   }
@@ -51,14 +39,10 @@ function makeCtx(
   if (env.defaultMode !== undefined) {
     ctx.sandboxPolicy = { defaultMode: env.defaultMode }
   }
-  applyGate(ctx as unknown as Context, section)
+  applyGate(ctx as unknown as Context, config)
   return {
     ctx,
     listeners: () => listener,
-    setSection(next: GithubGateSection) {
-      section = next
-      for (const notify of watchers) notify(next)
-    },
   }
 }
 
@@ -121,15 +105,19 @@ describe('github-permission-gate', () => {
     expect(await decide(gate, 'github_update_issue')).toMatchObject({ kind: 'ask' })
   })
 
-  it('settings watch updates keep the live view current without reload', async () => {
-    const gate = makeCtx({ mode: 'writes', action: 'ask', excludeTools: [] })
-    expect(await decide(gate, 'github_update_issue')).toMatchObject({ kind: 'ask' })
+  it('config edits take effect via entry reload (0.1.7 semantics)', async () => {
+    // v1.1.0: there is no in-place sectionScope.watch anymore — a settings
+    // edit live-reloads the entry, i.e. apply() runs again with the new
+    // config. Each mount below stands for one reload; the newest config is
+    // the authoritative posture.
+    const first = makeCtx({ mode: 'writes', action: 'ask', excludeTools: [] })
+    expect(await decide(first, 'github_update_issue')).toMatchObject({ kind: 'ask' })
 
-    gate.setSection({ mode: 'off', action: 'ask', excludeTools: [] })
-    expect(await decide(gate, 'github_update_issue')).toEqual({ kind: 'allow' })
+    const reloaded = makeCtx({ mode: 'off', action: 'ask', excludeTools: [] })
+    expect(await decide(reloaded, 'github_update_issue')).toEqual({ kind: 'allow' })
 
-    gate.setSection({ mode: 'writes', action: 'deny', excludeTools: [] })
-    const decision = await decide(gate, 'github_update_issue')
+    const denied = makeCtx({ mode: 'writes', action: 'deny', excludeTools: [] })
+    const decision = await decide(denied, 'github_update_issue')
     expect(decision).toMatchObject({ kind: 'deny' })
   })
 

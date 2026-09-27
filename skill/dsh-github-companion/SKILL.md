@@ -27,7 +27,7 @@ description: dsh-plugin-github 的配套实践技能（成本防护 + 发版流�
 - `github_push_files`：推前自动查目标仓 `in_progress` 的 Actions run，有 → 拒绝（`push_guard_in_progress`），列出运行中的 run。防"叠推烧已计费分钟"。
 - `github_create_release`：同样的 in-progress 检查 + 同名 tag 冷却（默认 30 分钟，`release_tag_cooldown`）。防"调试狂打 tag"。
 - **fail-open 设计**：预检 API 出错（404/403/网络）时放行——防护自身故障绝不阻塞工作。
-- 关闭/调整：设置 UI `github-tools` 区 `actionsGuardEnabled` / `actionsGuardTagCooldownMinutes`，或 `~/.dsh/settings.yaml` 用户层同名键。
+- 关闭/调整：设置 UI GitHub 区（entry config `actionsGuardEnabled` / `actionsGuardTagCooldownMinutes`），或 profile patch 行 `config:` 同名键。
 
 注意：**本地 `git push` 不经过插件**，防护只覆盖 API 推送面；本地推送纪律靠本技能约束 agent 行为。
 

@@ -16,8 +16,8 @@ npm test            # vitest, offline (mocked fetch)
 npm run build       # emit lib/
 ```
 
-Optional live checks (need a GitHub token in `~/.dsh/settings.yaml` under
-`github-tools.token`, or a `GITHUB_TOKEN` env var):
+Optional live checks (need a GitHub token in the plugin entry config
+(`token` field), or a `GITHUB_TOKEN` env var):
 
 ```bash
 node scripts/smoke-live.mjs     # read-only real-API smoke

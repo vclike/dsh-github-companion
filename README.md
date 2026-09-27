@@ -1,4 +1,4 @@
-﻿# dsh-github-companion
+# dsh-github-companion
 
 > DeepSeek Harness 插件：AI 操作 GitHub 的完整集成——33 个 REST/GraphQL 工具 + 进程内权限门 + 成本纪律 companion skill，零 gh CLI 依赖。
 >
@@ -107,18 +107,18 @@ reaches the next request without a restart):
 - **`ctx.credentials.resolve(ref)`** — the reference name (default
   `GITHUB_TOKEN`) is configured at composition time; the value lives in
   `$DSH_HOME/.credentials.yaml`
-- **Inline PAT via settings UI** — `github-tools.token` declared
-  `role('secret')`, written through DSH's settings document; the
-  redaction sidecar reports `set: true/false` on every describe read
+- **Inline PAT via settings UI** — `token` declared `role('secret')` on
+  the entry config, written through DSH's settings UI; the redaction
+  sidecar reports `set: true/false` on every describe read
 
 Without a token, all read tools work anonymously against public repos
 (60 req/h core limit); `github_get_me` reports that state.
 
-> **Storage note**: a PAT saved through the settings UI persists
-> server-side in `~/.dsh/settings.yaml` as plaintext on disk (like the
-> rest of that document). `role('secret')` protects the wire and the UI
-> — not the file. If disk-plaintext is a concern, keep the token in an
-> environment variable via `credentialRef` and leave the UI field empty.
+> **Storage note**: a PAT saved through the settings UI persists in the
+> plugin entry's config (the profile patch on DSH 0.1.7) as plaintext on
+> disk. `role('secret')` protects the wire and the UI — not the file. If
+> disk-plaintext is a concern, keep the token in an environment variable
+> via `credentialRef` and leave the UI field empty.
 
 ### Token permissions (fine-grained PAT recommended)
 
@@ -172,29 +172,37 @@ turn on repo creation.
 
 The plugin contributes one section to the DSH settings page (browser half
 = `client.js`, exposed via the `dsh.client` manifest). It talks to the
-official `settings.describe` / `settings.mutate` surface — no custom
-RPC.
+official settings describe/mutate surface — no custom RPC.
 
-Two namespaces:
+Two entries — since v1.1.0 / DSH 0.1.7 the settings ARE the entry config
+projected from the exported Config schemas; before 0.1.7 the same fields
+lived in runtime settings namespaces of the same names:
 
 - **`github-tools`** (rendered as "GitHub" section): `enableIssueWrites`,
   `enableGitDataTools`, `enableRepoCreation`, `enableCloneTools`,
   `workspaceRoot`, `proxyUrl`, `actionsGuardEnabled`,
   `actionsGuardTagCooldownMinutes`, and the write-only `token` field.
-- **`github-gate`** (rendered as "GitHub · Permission gate"): `mode`
-  (`off|writes|all`), `action` (`ask|deny`), `excludeTools` (managed as
-  removable pills, with common read-only suggestions).
+- **`github-permission-gate`** (rendered as "GitHub · Permission gate";
+  namespace `github-gate` before 0.1.7): `mode` (`off|writes|all`),
+  `action` (`ask|deny`), `excludeTools` (managed as removable pills, with
+  common read-only suggestions).
 
-Composition defaults come from the cordis.yml insert rows (`base` layer);
-changes apply live.
+Defaults come from the exported Config schemas. On 0.1.7 an edit
+live-reloads the entry; on 0.1.5 changes applied live via the settings
+watch.
 
-UI-free equivalent — add user-layer sections to `~/.dsh/settings.yaml`:
+UI-free equivalent — set the values on the bundle patch rows in your
+profile:
 
 ```yaml
-github-tools:
-  enableGitDataTools: true
-github-gate:
-  mode: all
+- id: github-tools
+  name: dsh-github-companion
+  config:
+    enableGitDataTools: true
+- id: github-permission-gate
+  name: dsh-github-companion/gate
+  config:
+    mode: all
 ```
 
 ## Install
@@ -238,13 +246,15 @@ v0.8.1 the plugin hard-guards the only push surface it controls:
   budget** (the author runs a $20/month Actions budget; see the companion
   skill for the reasoning).
 
-Configure via the settings UI (`github-tools` namespace) or
-`~/.dsh/settings.yaml`:
+Configure via the settings UI (`github-tools` entry) or the profile patch
+row:
 
 ```yaml
-github-tools:
-  actionsGuardEnabled: true            # default true
-  actionsGuardTagCooldownMinutes: 30   # default 30, 0 = off
+- id: github-tools
+  name: dsh-github-companion
+  config:
+    actionsGuardEnabled: true            # default true
+    actionsGuardTagCooldownMinutes: 30   # default 30, 0 = off
 ```
 
 `actionsGuardRefuseOnInProgress` (default true) is composition-layer only.
@@ -308,8 +318,9 @@ cancellation), and the CI hardening template.
 
 `id:` values are the **bundle identifiers** the loader tracks — they
 keep the legacy `github-tools` / `github-permission-gate` / `dsh-github-usage`
-naming so an existing `~/.dsh/settings.yaml` keeps working without
-migration. Only the `name:` (the module path) follows the new package
+naming, which since v1.1.0 / DSH 0.1.7 doubles as the settings key: the
+entry id is what the settings UI addresses. Only the `name:` (the module
+path) follows the new package
 name. This split keeps the rename a code change, not a settings
 migration.
 

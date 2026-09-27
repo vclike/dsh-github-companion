@@ -50,6 +50,15 @@ export interface GithubToolsConfig {
   actionsGuardRefuseOnInProgress: boolean
   /** Composition default: cooldown (minutes) before the same tag may be re-created via create_release. */
   actionsGuardTagCooldownMinutes: number
+  /**
+   * Inline PAT (secret). Empty/absent falls back to the credential
+   * reference. v1.1.0: this field moved here from the retired runtime
+   * settings namespace — under DSH 0.1.7 the entry config IS the settings
+   * surface, and `role('secret')` keeps it out of redacted wire reads.
+   * Declared WITHOUT a default so the redaction sidecar reports
+   * `set: false` until the user actually saves one.
+   */
+  token?: string
 }
 
 export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object({
@@ -70,9 +79,10 @@ export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object(
   actionsGuardEnabled: Schema.boolean().default(true).description('Default for the settings-UI Actions-cost-guard switch (push_files / create_release pre-flight)'),
   actionsGuardRefuseOnInProgress: Schema.boolean().default(true).description('Default: refuse pushes while Actions runs are in progress (queued jobs stack and burn minutes)'),
   actionsGuardTagCooldownMinutes: Schema.number().default(30).min(0).max(1_440).description('Cooldown in minutes before the same tag may be re-created via create_release'),
+  token: Schema.string().role('secret').description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),
 })
 
-/** User-editable subset surfaced in the DSH settings UI under namespace `github-tools`. */
+/** User-editable subset surfaced in the DSH settings UI (entry config since v1.1.0; the `github-tools` namespace before DSH 0.1.7). */
 export interface GithubToolsSection {
   enableIssueWrites: boolean
   enableGitDataTools: boolean

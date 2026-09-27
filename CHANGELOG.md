@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.1.0 (2026-09-27)
+
+### Fixes
+
+- **Activate on DSH 0.1.7-rc.2: migrate off the removed settings API.**
+  0.1.7 replaced the settings architecture — `ctx.settings.register()` and
+  `ctx.settings.installSection()` are both gone from `SettingsForms`
+  (configure/describe/update/replace/mutate remain). Both the `github-companion`
+  and `github-companion-gate` entries called `ctx.settings.register()` first
+  thing in `apply()`, so on 0.1.7-rc.2 **the whole plugin failed to activate**
+  (`TypeError: ctx.settings.register is not a function`) and all 33 tools
+  disappeared. v1.1.0 removes both `register` blocks:
+
+  - Every setting is now read from the entry's own **Config** fields. Both
+    entries already exported `Config` schemas, and all section fields shared
+    names/defaults with `Config`; the one missing field — the inline `token`
+    PAT — moved into `GithubToolsConfigSchema` with `role('secret')`, so the
+    entry config is now the complete settings surface.
+  - DSH 0.1.7 projects exported Config schemas into its settings UI natively;
+    an edit live-reloads the entry and the tool set re-registers. The old
+    in-place `sectionScope.watch(sync)` re-sync becomes an entry reload with
+    the same net effect (0.1.5 hosts keep working: the composition config was
+    always the fallback source).
+  - `@deepseek-ai/dsh-settings` left the dependency list (no imports remain).
+
+- **Settings card works on both settings generations.** `describeOurs` now
+  accepts both the 0.1.2–0.1.5 describe-mirror face (`ensure()` +
+  `getSnapshot().view.namespaces`) and the 0.1.7 `SettingsDescriptor[]`
+  (served to the old `settingsScope` API by the `dsh-settings-scope-compat`
+  bridge). Gate writes address the descriptor's own key (`github-gate`
+  namespace pre-0.1.7, `github-permission-gate` entry id on 0.1.7) instead of
+  a hardcoded constant, so the panel binds and writes correctly on either
+  host.
+
+### Migration notes
+
+- User-layer settings saved under 0.1.5's `~/.dsh/settings.yaml` are **not**
+  auto-migrated while the plugin entry is inactive (the 0.1.7 legacy-document
+  import rejects sections for entries that are not running, and keeps them in
+  `settings.yaml.imported`). After upgrading, restore your values once via the
+  settings UI or the profile patch rows: `github-tools` (switches,
+  `workspaceRoot`, `proxyUrl`, `token`) and `github-permission-gate`
+  (`mode`/`action`/`excludeTools`).
+- `peerDependencies` now declares `^0.1.7-rc.1` alongside the previous ranges.
+
+### Verification
+
+- `typecheck` clean, `vitest` 85/85, `verify-load.mjs` 24 default tools → 33
+  after entry reload, poisoned `ctx.settings` guard proves no legacy calls.
+- Headless boot on a scratch 0.1.7-rc.2 profile: zero activation warnings,
+  and a live agent turn invoked `github_get_me` end-to-end (registered and
+  executed; the fetch itself failed only for lack of a token in that sandbox).
+
+## 1.0.8-rc1 (2026-09-15)
+
+Trusted Publishing smoke test (no source changes).
+
+## 1.0.7 (2026-09-15)
+
+npm publish prep: Trusted Publishing workflow (`--tag next`), `repository`
+field for npm provenance.
+
 ## 1.0.6 (2026-09-11)
 
 ### Fixes

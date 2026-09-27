@@ -81,11 +81,13 @@ function makeFakeCtx(loggerName = 'ctx') {
 const main = await import(specifier)
 if (main.name !== 'github-companion') fail(`entry name expected 'github-companion', got ${JSON.stringify(main.name)}`)
 if (!Array.isArray(main.inject) || !main.inject.includes('tools')) fail('entry inject must include tools')
+if (main.inject.includes('settings')) fail('entry must not depend on the removed settings namespace API (v1.1.0)')
 if (typeof main.apply !== 'function') fail('entry must export an apply function')
 
 const gate = await import(`${specifier}/gate`)
 if (gate.name !== 'github-companion-gate') fail(`gate name mismatch: ${JSON.stringify(gate.name)}`)
-if (!Array.isArray(gate.inject) || !gate.inject.includes('settings')) fail('gate inject must include settings')
+if (!Array.isArray(gate.inject) || !gate.inject.includes('approval')) fail('gate inject must include approval')
+if (gate.inject.includes('settings')) fail('gate must not depend on the removed settings namespace API (v1.1.0)')
 if (typeof gate.apply !== 'function') fail('gate must export an apply function')
 
 // Skill entry (v0.9.0 merge of dsh-github-guide; renamed dsh-github-companion at v1.0.0):
@@ -110,9 +112,12 @@ const configDefaults = main.Config?.({}) ?? {}
 const gateDefaults = gate.Config?.({}) ?? {}
 
 // Mount the tools plugin with default-resolved config.
-const toolsCtx = makeFakeCtx('tools')
-toolsCtx.settings.register = undefined // guard: should not be used before we patch below
+// Poison guard: since v1.1.0 the plugin must not touch ctx.settings at all —
+// the 0.1.7 SettingsForms no longer has register()/installSection(), and
+// calling either is exactly the bug that kept this plugin from activating on
+// 0.1.7-rc.2. With register poisoned, any legacy call throws loudly here.
 const toolsCtxReal = makeFakeCtx('tools')
+toolsCtxReal.settings.register = undefined
 main.apply(toolsCtxReal, {
   credentialRef: 'GITHUB_TOKEN',
   apiBaseUrl: 'https://api.github.com',
@@ -131,26 +136,32 @@ for (const required of ['github_get_me', 'github_get_repository', 'github_search
   if (!names.includes(required)) fail(`missing tool ${required}`)
 }
 if (names.includes('github_push_files')) fail('git-data tools must be absent when enableGitDataTools=false')
-if (!toolsCtxReal.namespaces.some(n => n.ns === 'github-tools')) fail('settings namespace github-tools not registered')
+if (toolsCtxReal.namespaces.length !== 0)
+  fail(`apply must not register settings namespaces anymore, saw ${JSON.stringify(toolsCtxReal.namespaces)}`)
 
-// Flip the git-data + repo-creation switches live through the settings scope.
-const ghScope = toolsCtxReal.__scopes.get('github-tools')
-ghScope.update({ enableGitDataTools: true, enableRepoCreation: true })
-await new Promise(resolve => setImmediate(resolve))
-for (const watcher of ghScope.__watchers) watcher(ghScope.get())
-const flippedNames = toolsCtxReal.registerToolCalls.map(t => t.name)
+// Flip the git-data + repo-creation switches the 0.1.7 way: a settings edit
+// live-reloads the entry, i.e. apply() runs again with the new config.
+const flippedCtx = makeFakeCtx('tools')
+flippedCtx.settings.register = undefined
+main.apply(flippedCtx, {
+  credentialRef: 'GITHUB_TOKEN',
+  apiBaseUrl: 'https://api.github.com',
+  ...configDefaults,
+  enableGitDataTools: true,
+  enableRepoCreation: true,
+})
+const flippedNames = flippedCtx.registerToolCalls.map(t => t.name)
 if (!flippedNames.includes('github_push_files')) {
-  fail('push_files should appear after enableGitDataTools=true via watch')
+  fail('push_files should register when enableGitDataTools=true (entry reload)')
 }
 if (!flippedNames.includes('github_create_repository')) {
-  fail('github_create_repository should appear after enableRepoCreation=true via watch')
+  fail('github_create_repository should register when enableRepoCreation=true (entry reload)')
 }
 
 // Mount the gate plugin and exercise the waterfall.
 const gateCtx = makeFakeCtx('gate')
-gateCtx.settings.register = gateCtx.settings.register.bind(gateCtx)
 // The harness approval service is the channel that distinguishes "ask" from
-// "fail-open" in the new gate logic; provide a fake that mimics policy='ask'
+// "fail-open" in the gate logic; provide a fake that mimics policy='ask'
 // so the waterfall still produces `kind: 'ask'` here.
 gateCtx.approval = { config: { policy: 'ask' } }
 gate.apply(gateCtx, { mode: 'writes', action: 'ask', excludeTools: [], ...gateDefaults })
@@ -163,4 +174,4 @@ if (askWrite.kind !== 'ask') fail(`write tool should be gated with ask, got ${as
 const readPass = await preListeners[0]({ callId: 'c', name: 'github_get_me', arguments: {} }, next)
 if (readPass.kind !== 'allow') fail(`read tool should pass through, got ${readPass.kind}`)
 
-console.log(`LOAD OK — tools: ${names.length} (+git-data after flip: ${toolsCtxReal.registerToolCalls.length}), namespaces: ${toolsCtxReal.namespaces.map(n => n.ns).join(', ')}, gate mode: writes→ask, skill: dsh-github-usage registered`)
+console.log(`LOAD OK — tools: ${names.length} (+git-data via entry reload: ${flippedCtx.registerToolCalls.length}), config-driven settings (no namespace registration), gate mode: writes→ask, skill: dsh-github-usage registered`)

@@ -1,4 +1,4 @@
-﻿# dsh-github-companion
+# dsh-github-companion
 
 DeepSeek Harness 上**完整**的 GitHub 集成包：**33 个原生 agent 工具** + **进程内权限门** + **按需加载的用法技能** + **独立安装的成本纪律 companion skill**——一次装齐。**完全不依赖 `gh` CLI**。
 
@@ -128,28 +128,32 @@ token 永不进入子进程环境或日志——唯一的、可开关的例外�
 
 验证：问 agent 任意关于你 GitHub 账号的问题——`github_get_me` 应返回 `authenticated: true`（匿名模式返回 `false` 且只能读公开数据）。
 
-> **存储说明**：经设置界面保存的 PAT 会以**明文**落在本机的 `~/.dsh/settings.yaml`（与该文档其余部分一致）。`role('secret')` 保护的是网络传输与界面回显，不是磁盘文件。若在意明文落盘，请改用环境变量方式（`credentialRef`），设置界面留空即可。
+> **存储说明**：经设置界面保存的 PAT 会以**明文**落在本机插件 entry config 中（DSH 0.1.7 上即 profile patch）。`role('secret')` 保护的是网络传输与界面回显，不是磁盘文件。若在意明文落盘，请改用环境变量方式（`credentialRef`），设置界面留空即可。
 
 ## 设置界面
 
-三个挂载点各自注册设置命名空间，会渲染在 DSH 设置界面中：
+两个条目的设置即 entry config（v1.1.0 起 / DSH 0.1.7：由导出的 Config schema 投影进设置界面；0.1.5 上为同名 settings 命名空间，字段一致）：
 
-- `github-tools`：`enableIssueWrites`、`enableGitDataTools`、`enableRepoCreation`、`enableCloneTools`、`workspaceRoot`（**默认克隆目录**——克隆落点优先级：当前会话的工作区 → 此目录 → 询问；目录不存在时自动创建。agent 通过 `github_get_me` 读取该路径与状态）、`proxyUrl`（访问 api.github.com 的可选 HTTP(S) 代理 ——Node 的 fetch 不读系统代理，需要时在此显式填写；改动实时生效）、**Actions 成本防护**开关 `actionsGuardEnabled` + `actionsGuardTagCooldownMinutes` （见下文 [Actions 成本防护](#actions-成本防护)）
-- `github-gate`：`mode`（`off|writes|all`）、`action`（`ask|deny`）、`excludeTools`（设置卡片以胶囊形式增删，附常用只读工具建议）
+- `github-tools`：`enableIssueWrites`、`enableGitDataTools`、`enableRepoCreation`、`enableCloneTools`、`workspaceRoot`（**默认克隆目录**——克隆落点优先级：当前会话的工作区 → 此目录 → 询问；目录不存在时自动创建。agent 通过 `github_get_me` 读取该路径与状态）、`proxyUrl`（访问 api.github.com 的可选 HTTP(S) 代理 ——Node 的 fetch 不读系统代理，需要时在此显式填写）、`token`（内联 PAT，`role('secret')`）、**Actions 成本防护**开关 `actionsGuardEnabled` + `actionsGuardTagCooldownMinutes` （见下文 [Actions 成本防护](#actions-成本防护)）
+- `github-permission-gate`（0.1.7 entry id；0.1.5 命名空间为 `github-gate`）：`mode`（`off|writes|all`）、`action`（`ask|deny`）、`excludeTools`（设置卡片以胶囊形式增删，附常用只读工具建议）
 
-组合层默认值来自 cordis.yml 插入行（`base` 层）；修改实时生效。
+默认值来自导出的 Config schema。0.1.7 上修改触发 entry 重载后生效；0.1.5 上经 settings watch 实时生效。
 
-设置页的「GitHub」区块由本包自带的浏览器半（`client.js`，经 `dsh.client` manifest 暴露为 `/plugins/dsh-github-companion/client.js`）贡献，读写走官方 `settings.describe/mutate` 接口。注意：后端 `settings.register` 本身不产生 UI——每个设置区块都是客户端插件通过 `settings.section` 座位贡献的。
+设置页的「GitHub」区块由本包自带的浏览器半（`client.js`，经 `dsh.client` manifest 暴露）贡献，读写走官方设置接口（0.1.7 上由 `dsh-settings-scope-compat` 垫片把旧 `settingsScope` 面重建在 `configForms` 之上）。若删除该垫片，0.1.7 仍可用原生设置界面（Config schema 自动投影），仅自定义卡片不可用。
 
-不经设置 UI 的等效做法：往 `~/.dsh/settings.yaml` 直接加用户层分节：
+不经设置 UI 的等效做法：直接在 profile 的 bundle patch 行上写 `config:`：
 
 ```yaml
-github-tools:
-  enableGitDataTools: true
-  actionsGuardEnabled: true            # 默认 true
-  actionsGuardTagCooldownMinutes: 30   # 默认 30；0 = 关闭
-github-gate:
-  mode: all
+- id: github-tools
+  name: dsh-github-companion
+  config:
+    enableGitDataTools: true
+    actionsGuardEnabled: true            # 默认 true
+    actionsGuardTagCooldownMinutes: 30   # 默认 30；0 = 关闭
+- id: github-permission-gate
+  name: dsh-github-companion/gate
+  config:
+    mode: all
 ```
 
 ## 安装
@@ -232,7 +236,7 @@ github-tools:
       name: dsh-github-companion/skill
 ```
 
-`id:` 是 loader 跟踪的 **bundle 标识**，沿用历史命名（`github-tools` / `github-permission-gate` / `dsh-github-usage`），保证现有 `~/.dsh/settings.yaml` 无需迁移。只有 `name:`（模块路径）跟随新包名走。
+`id:` 是 loader 跟踪的 **bundle 标识**，沿用历史命名（`github-tools` / `github-permission-gate` / `dsh-github-usage`）；v1.1.0 起 / DSH 0.1.7 上它同时是设置的寻址键（entry id 即设置界面键）。只有 `name:`（模块路径）跟随新包名走。
 
 ## 开发
 

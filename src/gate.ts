@@ -23,20 +23,20 @@
  * gate auto-allows in that posture so unattended CI and full-access
  * interactive runs both work without mis-reports.
  *
- * The mode/action/exclusions are user-editable in the DSH settings UI under
- * namespace `github-gate`; cordis.yml provides the composition defaults.
+ * The mode/action/exclusions are user-editable in the DSH settings UI as this
+ * entry's own Config fields (entry id `github-permission-gate`; v1.1.0 moved
+ * them from the retired `github-gate` runtime namespace). The bundle patch
+ * provides the composition defaults.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
-// Imported for its declaration-merging side effect: `Context.settings` lives here.
-import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 
 import { GithubGateSectionSchema, type GithubGateSection } from './config.ts'
 import { GITHUB_WRITE_TOOL_LABELS, GITHUB_WRITE_TOOLS } from './tools.ts'
 
 export const name = 'github-companion-gate'
-export const inject = ['tools', 'settings', 'shell', 'approval'] as const
+export const inject = ['tools', 'shell', 'approval'] as const
 
 export const Config: typeof GithubGateSectionSchema = GithubGateSectionSchema
 
@@ -108,19 +108,12 @@ function hasNoApprovalChannel(ctx: Context, agent?: { session?: unknown }): bool
 }
 
 export function apply(ctx: Context, config: GithubGateSection) {
-  const sectionScope = ctx.settings.register('github-gate', GithubGateSectionSchema, {
-    base: { mode: config.mode, action: config.action, excludeTools: config.excludeTools },
-    applies: 'live',
-  })
-
-  // Live view of the resolved section; watch() keeps it current.
-  let current: GithubGateSection = sectionScope.get()
-  ctx.effect(() => {
-    const unwatch = sectionScope.watch(next => {
-      current = next
-    })
-    return unwatch
-  })
+  // v1.1.0: the gate reads its mode/action/exemptions straight from the entry
+  // config. DSH 0.1.7 removed ctx.settings.register/installSection (which made
+  // this entry fail to activate on 0.1.7-rc.2) and projects the exported
+  // Config schema into its settings UI instead; an edit live-reloads this
+  // entry, so `config` is always the current view — no in-place watch needed.
+  const current: GithubGateSection = config
 
   ctx.on('tools/pre-execute', async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
     if (!exec.name.startsWith('github_')) return next()

@@ -26,5 +26,5 @@
 
 - 预检 **fail-open**：预检 API 自身出错（404/403/网络断）→ 放行。防护故障绝不阻塞工作。
 - 拒绝结果携带 `code`：`push_guard_in_progress`（409）含运行中 run 清单；`release_tag_cooldown`（429）含剩余等待时间。
-- 关闭方式（二选一）：设置 UI `github-tools.actionsGuardEnabled=false`；或 `~/.dsh/settings.yaml` 用户层同名键。tag 冷却时长：`actionsGuardTagCooldownMinutes`（默认 30，0=关）。
+- 关闭方式（二选一）：设置 UI GitHub 区 `actionsGuardEnabled=false`；或 profile patch 行 `config:` 同名键。tag 冷却时长：`actionsGuardTagCooldownMinutes`（默认 30，0=关）。
 - **边界**：本地 `git push` 不经过插件进程，插件拦不住——这是本分册存在的原因。
