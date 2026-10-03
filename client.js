@@ -223,58 +223,149 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(style)
 		}
 
-		/** Fetch the settings view and pick out our two entries. */
+		/**
+		 * Lazy service getter that never hard-fails: 0.2.0 renamed/moved several
+		 * settings-side services, so module-level `inject` is kept minimal and
+		 * every optional face is resolved here at call time instead.
+		 */
+		function serviceGet(ctx, name) {
+			if (ctx && typeof ctx.get === 'function') {
+				try { const s = ctx.get(name); if (s) return s } catch { /* not provided */ }
+			}
+			return ctx ? ctx[name] : undefined
+		}
+
+		/** Reject a promise that takes longer than `ms` (old per-ns controllers hang forever on 0.2.0). */
+		function withTimeout(promise, ms, message) {
+			return Promise.race([
+				promise,
+				new Promise((_, reject) => { setTimeout(() => reject(new Error(message)), ms) }),
+			])
+		}
+
+		/**
+		 * Fetch the settings view and pick out our two entries.
+		 *
+		 * v1.1.1 (DSH 0.2.0-rc.2): the settings domain base is `ctx.configForms`
+		 * (shared describe mirror + per-entry ConfigForm controllers); the 0.1.7
+		 * `settingsScope` compat face is gone/renamed. Read order:
+		 *   1. configForms.describe() mirror face — ensure() → snapshot.view.namespaces
+		 *   2. legacy binder describe() (webUiSettings / settingsScope), both the
+		 *      mirror-face shape and the plain descriptor-array shape
+		 * Each namespace view is then enriched from `configForms.get(ns)` — the
+		 * controller snapshot carries the schema-resolved `value` + `revision`
+		 * even when the wire view section is thin.
+		 */
 		async function describeOurs(ctx) {
-			const binder = ctx.settingsScope
-			if (!binder || typeof binder.describe !== 'function')
-				throw new Error('settingsScope service unavailable')
-			const face = binder.describe()
-			let list
-			if (face && typeof face.ensure === 'function') {
-				// DSH 0.1.2–0.1.5: the shared describe mirror face.
-				await face.ensure()
-				const snap = face.getSnapshot()
-				if (snap.status === 'unavailable')
-					throw new Error(snap.error || 'settings mirror unavailable')
-				list = (snap.view && snap.view.namespaces) || []
-			} else if (Array.isArray(face)) {
-				// DSH 0.1.7+: dsh-settings-scope-compat re-provides settingsScope
-				// over configForms, whose describe() is a plain SettingsDescriptor[]
-				// keyed by profile entry id — the bundle patch row ids
-				// `github-tools` / `github-permission-gate`.
-				list = face
-			} else {
-				throw new Error('settings describe returned an unsupported shape')
+			const forms = serviceGet(ctx, 'configForms')
+			let list = null
+			if (forms && typeof forms.describe === 'function') {
+				const face = forms.describe()
+				if (face && typeof face.ensure === 'function') {
+					await face.ensure()
+					const snap = face.getSnapshot()
+					if (snap.status === 'unavailable')
+						throw new Error(snap.error || 'settings mirror unavailable')
+					list = (snap.view && snap.view.namespaces) || []
+				} else if (Array.isArray(face)) {
+					list = face
+				}
 			}
-			const byNs = new Map(list.map(d => [d.ns, d]))
-			return {
-				tools: byNs.get(NS_TOOLS) || null,
-				// v1.1.0: on 0.1.7 the gate form is keyed by the entry id
-				// `github-permission-gate` (0.1.5 kept the `github-gate` namespace).
-				gate: byNs.get(NS_GATE) || byNs.get('github-permission-gate') || null,
+			if (list === null) {
+				const binder = serviceGet(ctx, 'webUiSettings') || serviceGet(ctx, 'settingsScope')
+				if (!binder || typeof binder.describe !== 'function')
+					throw new Error('settings 数据面不可用（configForms 与 settingsScope 都未提供）')
+				const face = binder.describe()
+				if (face && typeof face.ensure === 'function') {
+					await face.ensure()
+					const snap = face.getSnapshot()
+					if (snap.status === 'unavailable')
+						throw new Error(snap.error || 'settings mirror unavailable')
+					list = (snap.view && snap.view.namespaces) || []
+				} else if (Array.isArray(face)) {
+					// 0.1.7 compat: plain SettingsDescriptor[] keyed by entry id.
+					list = face
+				} else {
+					throw new Error('settings describe returned an unsupported shape')
+				}
 			}
+			const byNs = new Map()
+			for (const d of list) {
+				if (!d) continue
+				if (typeof d.ns === 'string' && d.ns) byNs.set(d.ns, d)
+				else if (typeof d.id === 'string' && d.id) byNs.set(d.id, d)
+			}
+			const tools = byNs.get(NS_TOOLS) || byNs.get('github-tools') || null
+			// v1.1.0: on 0.1.7+ the gate form is keyed by the entry id
+			// `github-permission-gate` (0.1.5 kept the `github-gate` namespace).
+			const gate = byNs.get(NS_GATE) || byNs.get('github-permission-gate') || null
+			// Enrich from per-entry controllers when available (schema-resolved
+			// value + revision; user layer marks secret overrides). Best effort.
+			if (forms && typeof forms.get === 'function') {
+				for (const desc of [tools, gate]) {
+					if (!desc || typeof desc.ns !== 'string') continue
+					try {
+						const form = forms.get(desc.ns)
+						const snap = form && typeof form.getSnapshot === 'function' ? form.getSnapshot() : null
+						if (snap && snap.status === 'ready') {
+							if (snap.value !== undefined) desc.value = snap.value
+							if (snap.revision !== undefined) desc.revision = snap.revision
+							if (snap.user !== undefined) desc.__user = snap.user
+						}
+					} catch (error) {
+						console.warn('[dsh-gh] configForms.get(' + desc.ns + ') enrich failed:', String((error && error.message) || error))
+					}
+				}
+			}
+			return { tools, gate }
 		}
 
-		/** One path-op write against a namespace's user layer. */
+		/**
+		 * One path-op write against a namespace's user layer.
+		 *
+		 * v1.1.1 (DSH 0.2.0-rc.2): write through `configForms.get(ns).mutate()` —
+		 * the per-entry controller carries the latest revision fence, folds its
+		 * answer into the shared mirror, and performs the recovery read on
+		 * refusal. The legacy `settingsScope.bind({namespace}).mutate()` path is
+		 * kept as a fallback for 0.1.x hosts, guarded by a hard timeout: on
+		 * 0.2.0 the old controller is documented to never resolve (the
+		 * deep-research migration hit the same hang), which used to present as
+		 * the settings card waiting forever instead of an audible failure.
+		 */
 		async function writeOp(ctx, ns, descriptor, op) {
-			const binder = ctx.settingsScope
-			if (!binder || typeof binder.bind !== 'function')
-				throw new Error('settingsScope service unavailable')
-			const scope = binder.bind({ namespace: ns })
-			// Pass `undefined` for `expectedRevision`. dsh-settings skips the
-			// revision-conflict check when the argument is `undefined`; the
-			// read-modify-write loop in this card re-reads the descriptor
-			// via `reload()` after every write, so a stale-revision scenario
-			// can only happen if the user mutates the same namespace from
-			// somewhere else mid-click, in which case the next write will
-			// simply re-merge on top of the new value — no data loss.
-			await scope.mutate([op])
+			const forms = serviceGet(ctx, 'configForms')
+			if (forms && typeof forms.get === 'function') {
+				const form = forms.get(ns)
+				if (form && typeof form.mutate === 'function') {
+					const ok = await form.mutate([op])
+					if (ok !== false) return
+					throw new Error('宿主拒绝了该次写入（configForms.mutate 返回 false）')
+				}
+			}
+			const binder = serviceGet(ctx, 'webUiSettings') || serviceGet(ctx, 'settingsScope')
+			if (binder && typeof binder.bind === 'function') {
+				const scope = binder.bind({ namespace: ns })
+				await withTimeout(
+					scope.mutate([op]),
+					15000,
+					'settingsScope.mutate 15s 未返回（旧控制器在此宿主上会挂起，属于兼容性失败）',
+				)
+				return
+			}
+			throw new Error('settings 写入服务不可用（configForms 与 settingsScope 都缺失）')
 		}
 
-		/** True when the redaction sidecar reports a value at `field`. */
+		/**
+		 * True when the token at `field` is known-set. Primary signal: the
+		 * redaction sidecar on the namespace view. Fallback (v1.1.1): the
+		 * ConfigFormSnapshot user layer — a field's PRESENCE there marks an
+		 * override, and secret values never round-trip to the browser anyway.
+		 */
 		function secretSet(descriptor, field) {
 			const secrets = (descriptor && descriptor.secrets) || []
-			return secrets.some(s => Array.isArray(s.path) && s.path.join('.') === field && s.set === true)
+			if (secrets.some(s => Array.isArray(s.path) && s.path.join('.') === field && s.set === true)) return true
+			const user = descriptor && descriptor.__user
+			return !!(user && typeof user === 'object' && Object.prototype.hasOwnProperty.call(user, field))
 		}
 
 		/**
@@ -743,7 +834,7 @@ window.__ModuleLoader__.load({
 		}
 
 		function apply(ctx) {
-			console.log('[dsh-gh] apply: ctx.settingsScope =', typeof (ctx && ctx.settingsScope),
+			console.log('[dsh-gh] apply: ctx.configForms =', typeof (ctx && ctx.configForms),
 				'ctx.slots =', typeof (ctx && ctx.slots),
 				'ctx.uiWorkspace =', typeof (ctx && ctx.uiWorkspace))
 			ensureStyles()
@@ -763,7 +854,11 @@ window.__ModuleLoader__.load({
 			}
 		}
 
-		module.exports.inject = ['settingsScope', 'slots', 'uiWorkspace']
+		// v1.1.1: hard-inject only what every supported host provides. The old
+		// `settingsScope` (0.1.7 compat bridge) is resolved lazily via
+		// serviceGet() — hard-injecting a service the host renamed would stop
+		// the whole module from loading and take the settings card with it.
+		module.exports.inject = ['slots', 'configForms', 'uiWorkspace']
 		module.exports.apply = apply
 		return module.exports
 	},

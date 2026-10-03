@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.1 (2026-10-04)
+
+### Fixes
+
+- **Settings card works on DSH 0.2.0-rc.2: move the client onto `configForms`.**
+  0.2.0 made `ctx.configForms` the settings domain base (shared describe
+  mirror + per-entry `ConfigForm` controllers). The v1.1.0 card still went
+  through the 0.1.7 `ctx.settingsScope` compat face, and the legacy
+  `bind({namespace}).mutate()` controller never resolves on 0.2.0 — the card
+  could not read or save (and a missing injected service could take the whole
+  card down). The card now:
+  - reads through `ctx.configForms.describe()` (shared mirror, `ensure()` →
+    `view.namespaces`), then enriches both entries from
+    `configForms.get(ns).getSnapshot()` (schema-resolved value + revision +
+    raw user layer);
+  - writes through `configForms.get(ns).mutate([op])` (latest-revision fence,
+    answer folded into the mirror, refusal surfaces as a visible error);
+  - keeps the 0.1.x `settingsScope` path as a **15s-timeout-guarded**
+    fallback instead of hanging forever;
+  - hard-injects only `slots` / `configForms` / `uiWorkspace`; the optional
+    legacy faces resolve lazily, so a renamed service can no longer stop the
+    card from registering;
+  - token badge falls back to the user-layer presence check when the
+    redaction sidecar is absent from the wire view.
+
+- `peerDependencies`: `@deepseek-ai/dsh` now also accepts `^0.2.0-rc.2`
+  (the market compatibility gate rejected 1.1.0 on 0.2.0-rc.2 hosts).
+
 ## 1.1.0 (2026-09-27)
 
 ### Fixes
