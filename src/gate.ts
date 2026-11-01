@@ -32,7 +32,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 
-import { GithubGateSectionSchema, type GithubGateSection } from './config.ts'
+import { GithubGateSectionSchema, liveConfig, type GithubGateSection } from './config.ts'
 import { GITHUB_WRITE_TOOL_LABELS, GITHUB_WRITE_TOOLS } from './tools.ts'
 
 export const name = 'github-companion-gate'
@@ -113,7 +113,9 @@ export function apply(ctx: Context, config: GithubGateSection) {
   // this entry fail to activate on 0.1.7-rc.2) and projects the exported
   // Config schema into its settings UI instead; an edit live-reloads this
   // entry, so `config` is always the current view — no in-place watch needed.
-  const current: GithubGateSection = config
+  // 2026-10-05：三个字段已标 .volatile()（设置投影契约），resolveConfig 给的
+  // 是 Volatile 包装对象——apply 顶部整份解包成普通快照，重载语义不变。
+  const current: GithubGateSection = liveConfig(config) as unknown as GithubGateSection
 
   ctx.on('tools/pre-execute', async (exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision> => {
     if (!exec.name.startsWith('github_')) return next()

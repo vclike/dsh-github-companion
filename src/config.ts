@@ -61,25 +61,36 @@ export interface GithubToolsConfig {
   token?: string
 }
 
-export const GithubToolsConfigSchema: Schema<GithubToolsConfig> = Schema.object({
+// 类型不加 `Schema<GithubToolsConfig>` 显式注解：volatile 字段把 schema 输出
+// 参数化为 `volatile-defined`，运行时经 resolveConfig 得到 Volatile 包装对象，
+// 显式注解会与 Volatile<T> 冲突。域模型类型（上方 interface）只约束
+// apply/liveConfig 的消费面，运行时包装由 liveConfig 统一解包。
+export const GithubToolsConfigSchema = Schema.object({
   credentialRef: Schema.string().default('GITHUB_TOKEN').description('Environment-variable name that holds the GitHub PAT'),
   apiBaseUrl: Schema.string().default('https://api.github.com').description('GitHub REST API root (GHES: https://host/api/v3)'),
   requestTimeoutMs: Schema.number().default(30_000).min(1_000).max(300_000).description('Per-request timeout in ms'),
   maxRetries: Schema.number().default(1).min(0).max(3).description('Retries for rate-limited responses and transient network failures'),
   maxPerPage: Schema.number().default(30).min(1).max(100).description('Upper bound for per_page on list/search tools'),
   maxFileBytes: Schema.number().default(262_144).min(1_024).max(4_194_304).description('Truncate file contents beyond this many bytes'),
-  enableIssueWrites: Schema.boolean().default(true).description('Default for the settings-UI issue-write switch'),
-  enableGitDataTools: Schema.boolean().default(false).description('Default for the settings-UI git-data-write switch'),
-  enableRepoCreation: Schema.boolean().default(false).description('Default for the settings-UI private-repo-creation switch'),
-  enableCloneTools: Schema.boolean().default(false).description('Default for the settings-UI local-clone switch (token bridges to ONE git subprocess via env header)'),
+  // ── DSH 0.1.7+/0.2.0 设置投影（2026-10-05 修复）─────────────────────────
+  // 宿主把导出的 Config schema 投影进设置界面时**只展示 volatile 字段**
+  // （@deepseek-ai/dsh-settings：projectForm(volatileForm)，非 volatile 一律
+  // 不进 value/user；写入落盘前 strip 剔除非 volatile）。下面每个卡片可编辑
+  // 字段都必须 .volatile()，否则 github-tools 条目在设置页整条缺席——
+  // v1.1.0/v1.1.1 的「设置卡显示插件可能未启用」即此根因（对照
+  // dsh-deep-research src/settings.ts 同款迁移）。
+  enableIssueWrites: Schema.boolean().default(true).volatile().description('Default for the settings-UI issue-write switch'),
+  enableGitDataTools: Schema.boolean().default(false).volatile().description('Default for the settings-UI git-data-write switch'),
+  enableRepoCreation: Schema.boolean().default(false).volatile().description('Default for the settings-UI private-repo-creation switch'),
+  enableCloneTools: Schema.boolean().default(false).volatile().description('Default for the settings-UI local-clone switch (token bridges to ONE git subprocess via env header)'),
   gitSslBackend: Schema.string().default('').description("TLS backend for the git subprocess: '' = git default, or 'openssl'/'schannel'"),
   gitTimeoutMs: Schema.number().default(300_000).min(5_000).max(1_800_000).description('Timeout for one git clone subprocess in ms'),
-  workspaceRoot: Schema.string().default('').description('Local root directory for cloned/checked-out repositories (empty = no convention)'),
-  proxyUrl: Schema.string().default('').description('Optional HTTP(S) proxy for GitHub API traffic (e.g. http://127.0.0.1:7890)'),
-  actionsGuardEnabled: Schema.boolean().default(true).description('Default for the settings-UI Actions-cost-guard switch (push_files / create_release pre-flight)'),
+  workspaceRoot: Schema.string().default('').volatile().description('Local root directory for cloned/checked-out repositories (empty = no convention)'),
+  proxyUrl: Schema.string().default('').volatile().description('Optional HTTP(S) proxy for GitHub API traffic (e.g. http://127.0.0.1:7890)'),
+  actionsGuardEnabled: Schema.boolean().default(true).volatile().description('Default for the settings-UI Actions-cost-guard switch (push_files / create_release pre-flight)'),
   actionsGuardRefuseOnInProgress: Schema.boolean().default(true).description('Default: refuse pushes while Actions runs are in progress (queued jobs stack and burn minutes)'),
-  actionsGuardTagCooldownMinutes: Schema.number().default(30).min(0).max(1_440).description('Cooldown in minutes before the same tag may be re-created via create_release'),
-  token: Schema.string().role('secret').description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),
+  actionsGuardTagCooldownMinutes: Schema.number().default(30).min(0).max(1_440).volatile().description('Cooldown in minutes before the same tag may be re-created via create_release'),
+  token: Schema.string().role('secret').volatile().description('GitHub PAT (overrides the GITHUB_TOKEN environment credential)'),
 })
 
 /** User-editable subset surfaced in the DSH settings UI (entry config since v1.1.0; the `github-tools` namespace before DSH 0.1.7). */
@@ -167,10 +178,11 @@ export interface GithubGateSection {
   excludeTools: string[]
 }
 
-export const GithubGateSectionSchema: Schema<GithubGateSection> = Schema.object({
-  mode: Schema.union<'off' | 'writes' | 'all'>(['off', 'writes', 'all']).default('writes').description('Gate scope: off / writes only / all github tools'),
-  action: Schema.union<'ask' | 'deny'>(['ask', 'deny']).default('ask').description('Decision for gated calls'),
-  excludeTools: Schema.array(String).default([
+export const GithubGateSectionSchema = Schema.object({
+  // volatile 三字段 = gate 卡片的全部可编辑项（投影契约同上）。
+  mode: Schema.union<'off' | 'writes' | 'all'>(['off', 'writes', 'all']).default('writes').volatile().description('Gate scope: off / writes only / all github tools'),
+  action: Schema.union<'ask' | 'deny'>(['ask', 'deny']).default('ask').volatile().description('Decision for gated calls'),
+  excludeTools: Schema.array(String).volatile().default([
     'github_search_code',
     'github_search_repositories',
     'github_latest_release',
@@ -184,3 +196,22 @@ export const GithubGateSectionSchema: Schema<GithubGateSection> = Schema.object(
     'github_create_release',
   ]).description('Exempted tool names (default = author posture; UI reset restores this list)'),
 })
+
+// ── volatile 解包（0.1.7+/0.2.0 契约）────────────────────────────────────
+// Config 里标了 .volatile() 的字段，经 cordis resolveConfig() 解析后是
+// Volatile 包装对象（真值只能 .get() 取），行 config 显式给了值也一样。
+// 直接读 config.xxx 会把包装对象当真值传下去（对照 dsh-deep-research
+// 2026-09-27 实测事故）。解包helper用鸭子类型判断，不新增 cosmokit 依赖。
+export function unwrapVolatile(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value
+  const getter = (value as { get?: unknown }).get
+  return typeof getter === 'function' ? (getter as () => unknown).call(value) : value
+}
+
+/** 把整份 loader 行 config 的 volatile 包装解成普通字段（apply 顶部调用一次）。 */
+export function liveConfig(config: unknown): Record<string, unknown> {
+  const source = (config ?? {}) as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(source)) out[key] = unwrapVolatile(value)
+  return out
+}

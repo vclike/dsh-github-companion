@@ -24,6 +24,7 @@ import { GithubApi } from './api.ts'
 import { GithubClient } from './client.ts'
 import {
   GithubToolsConfigSchema,
+  liveConfig,
   type GithubToolsConfig,
 } from './config.ts'
 import { buildGithubTools } from './tools.ts'
@@ -34,7 +35,12 @@ export const inject = ['tools', 'credentials'] as const
 export const Config: typeof GithubToolsConfigSchema = GithubToolsConfigSchema
 
 export function apply(ctx: Context, config: GithubToolsConfig) {
-  const ref = credentialRef(config.credentialRef)
+  // 2026-10-05（volatile 迁移补课）：设置可编辑字段标了 .volatile() 后，经
+  // cordis resolveConfig 解析的都是 Volatile 包装对象（真值 .get()），行
+  // config 显式给了值也一样。这里整份解包成普通快照再供全部读取；设置编辑
+  // 仍然 live-reload 本条目（apply 重跑生成新快照），语义不变。
+  const cfg = liveConfig(config) as unknown as GithubToolsConfig
+  const ref = credentialRef(cfg.credentialRef)
 
   // v1.1.0: settings moved from the retired runtime namespace (`github-tools`,
   // registered via ctx.settings.register) to the entry's own Config fields —
@@ -50,18 +56,18 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
   // wins over the credential seam; empty/absent falls back to the env
   // reference. Both paths resolve per operation — never cached.
   const sectionToken = (): string =>
-    typeof config.token === 'string' ? config.token.trim() : ''
+    typeof cfg.token === 'string' ? cfg.token.trim() : ''
 
   // Entry-config string settings (workspace convention, proxy).
   const sectionString = (key: 'workspaceRoot' | 'proxyUrl'): string => {
-    const value = (config as unknown as Record<string, unknown>)[key]
+    const value = cfg[key]
     return typeof value === 'string' ? value.trim() : ''
   }
 
   const client = new GithubClient({
-    apiBaseUrl: config.apiBaseUrl,
-    requestTimeoutMs: config.requestTimeoutMs,
-    maxRetries: config.maxRetries,
+    apiBaseUrl: cfg.apiBaseUrl,
+    requestTimeoutMs: cfg.requestTimeoutMs,
+    maxRetries: cfg.maxRetries,
     // Read live so a proxy change reaches the next request without a restart.
     get proxyUrl() {
       return sectionString('proxyUrl')
@@ -91,12 +97,13 @@ export function apply(ctx: Context, config: GithubToolsConfig) {
 
   ctx.effect(() => {
     // buildGithubTools takes (api, config, section); since v1.1.0 the entry
-    // config carries the section fields too, so config fills both roles.
-    const disposers = buildGithubTools(api, config, config).map(tool => ctx.tools.register(tool))
+    // config carries the section fields too, so cfg fills both roles —
+    // already volatile-unwrapped (see top of apply).
+    const disposers = buildGithubTools(api, cfg, cfg).map(tool => ctx.tools.register(tool))
     return () => disposers.forEach(dispose => dispose())
   })
 
   // Defensive tail log: minimal embedders (tests, scripts) may pass a bare
   // logger; a missing method must never fail an otherwise-successful apply.
-  ctx.logger?.info?.('github-tools ready (%s, %s)', config.apiBaseUrl, config.credentialRef)
+  ctx.logger?.info?.('github-tools ready (%s, %s)', cfg.apiBaseUrl, cfg.credentialRef)
 }
